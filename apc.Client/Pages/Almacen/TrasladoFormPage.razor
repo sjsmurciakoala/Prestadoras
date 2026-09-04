@@ -1,0 +1,542 @@
+@page "/almacen/traslados/nuevo"
+@page "/almacen/traslados/{Id:int}"
+@attribute [Authorize(Policy = PermissionNames.Inventario.Create)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.Constants
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject TrasladosClient TrasladosClient
+@inject TiposMovimientoClient TiposClient
+@inject BodegasClient BodegasClient
+@inject ArticulosClient ArticulosClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>SIAD - @(EsLectura ? "Detalle de traslado" : "Nuevo traslado")</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="TrasFormToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">@(EsLectura ? $"Traslado {modelo.Numero:00000}" : "Nuevo traslado entre bodegas")</h2>
+            <p class="page-subtitle">@(EsLectura ? "Detalle, tránsito y recepción" : "Envía mercadería de una bodega a otra")</p>
+        </div>
+        <div class="d-flex gap-2">
+            @if (EsLectura)
+            {
+                <DxButton Text="Imprimir traslado" IconCssClass="bi bi-printer" RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline" Click="MostrarTraslado" />
+            }
+            <DxButton Text="Volver" IconCssClass="bi bi-arrow-left" RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="@(() => Navigation.NavigateTo("/almacen/traslados"))" />
+        </div>
+    </div>
+
+    @if (cargando)
+    {
+        <div class="modern-card"><DxLoadingPanel Visible="true" Text="Cargando..." /><div style="height:120px"></div></div>
+    }
+    else
+    {
+        @if (EsLectura)
+        {
+            <div class="alert @EstadoAlertClass mb-3" role="alert">
+                <i class="bi @EstadoIcon me-2"></i>
+                <strong>@EstadoTexto</strong>
+                @if (modelo.Estado == EstadoMovimientoAlmacen.Anulado)
+                { <span> — por @modelo.AnuladoPor el @modelo.FechaAnulacion?.ToString("dd/MM/yyyy HH:mm"). Motivo: @modelo.MotivoAnulacion</span> }
+                else if (modelo.Estado == EstadoMovimientoAlmacen.Recibido)
+                { <span> — completado @modelo.FechaRecepcion?.ToString("dd/MM/yyyy HH:mm")</span> }
+                else
+                { <span> — @PorcentajeRecibido.ToString("0.#")% recibido</span> }
+            </div>
+        }
+
+        <div class="modern-card mb-3">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Tipo *</label>
+                    <DxComboBox Data="@tipos" TData="TipoMovimientoAlmacenListItemDto" TValue="int?"
+                                Value="@(modelo.TipoMovimientoId == 0 ? (int?)null : modelo.TipoMovimientoId)"
+                                ValueChanged="@((int? v) => modelo.TipoMovimientoId = v ?? 0)"
+                                ValueFieldName="@nameof(TipoMovimientoAlmacenListItemDto.Id)"
+                                TextFieldName="@nameof(TipoMovimientoAlmacenListItemDto.Nombre)"
+                                NullText="Seleccione..." Enabled="@(!EsLectura)" CssClass="w-100" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Bodega origen *</label>
+                    @if (EsLectura)
+                    { <div class="form-control-plaintext fw-semibold">@modelo.BodegaOrigenNombre</div> }
+                    else
+                    {
+                        <DxComboBox Data="@bodegas" TData="BodegaLookupDto" TValue="int?"
+                                    Value="@modelo.BodegaOrigenId" ValueChanged="@((int? v) => OnOrigenChanged(v))"
+                                    ValueFieldName="@nameof(BodegaLookupDto.Id)" TextFieldName="@nameof(BodegaLookupDto.Display)"
+                                    NullText="Seleccione..." Enabled="@(modelo.Detalles.Count == 0)" CssClass="w-100" />
+                    }
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Bodega destino *</label>
+                    @if (EsLectura)
+                    { <div class="form-control-plaintext fw-semibold">@modelo.BodegaDestinoNombre</div> }
+                    else
+                    {
+                        <DxComboBox Data="@BodegasDestino" TData="BodegaLookupDto" TValue="int?"
+                                    Value="@(modelo.BodegaDestinoId == 0 ? (int?)null : modelo.BodegaDestinoId)"
+                                    ValueChanged="@((int? v) => modelo.BodegaDestinoId = v ?? 0)"
+                                    ValueFieldName="@nameof(BodegaLookupDto.Id)" TextFieldName="@nameof(BodegaLookupDto.Display)"
+                                    NullText="Seleccione..." CssClass="w-100" />
+                    }
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Fecha *</label>
+                    <DxDateEdit @bind-Date="fecha" Enabled="@(!EsLectura)" CssClass="w-100" />
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label small fw-semibold">Motivo *</label>
+                    @if (EsLectura)
+                    { <div class="form-control-plaintext">@modelo.Motivo</div> }
+                    else
+                    { <DxTextBox @bind-Text="modelo.Motivo" NullText="Razón del traslado" MaxLength="120" CssClass="w-100" /> }
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">N.º de documento</label>
+                    @if (EsLectura)
+                    { <div class="form-control-plaintext">@(string.IsNullOrWhiteSpace(modelo.DocumentoReferencia) ? "—" : modelo.DocumentoReferencia)</div> }
+                    else
+                    { <DxTextBox @bind-Text="modelo.DocumentoReferencia" NullText="Acta, memo… (opcional)" MaxLength="30" CssClass="w-100" /> }
+                </div>
+            </div>
+
+            @if (!EsLectura)
+            {
+                <div class="d-flex align-items-center gap-2 mt-3 p-2 rounded @(esDirecto ? "bg-secondary-subtle text-secondary-emphasis" : "bg-warning-subtle text-warning-emphasis")">
+                    <DxCheckBox Checked="@esDirecto" CheckedChanged="@((bool v) => OnDirectoChanged(v))" CheckType="CheckType.Switch">
+                        Traslado directo (entra a destino de una)
+                    </DxCheckBox>
+                    <span class="small ms-2">
+                        <i class="bi @(esDirecto ? "bi-lightning-charge" : "bi-truck")"></i>
+                        @(esDirecto
+                            ? "Sale de origen y entra a destino en el mismo instante."
+                            : "Sale de origen y queda en tránsito hasta que se confirme la recepción en destino.")
+                    </span>
+                </div>
+            }
+            else
+            {
+                <div class="mt-2 small text-muted">
+                    <i class="bi @(modelo.RequiereRecepcion ? "bi-truck" : "bi-lightning-charge")"></i>
+                    @(modelo.RequiereRecepcion ? "Con recepción en destino (dos pasos)." : "Traslado directo (un paso).")
+                </div>
+            }
+        </div>
+
+        @if (!EsLectura)
+        {
+            <div class="modern-card mb-3">
+                <div class="d-flex flex-wrap gap-2 align-items-end">
+                    <div style="flex:1; min-width:240px;">
+                        <label class="form-label small fw-semibold">Agregar artículo</label>
+                        <DxComboBox Data="@articulos" @bind-Value="articuloSeleccionado" TData="ArticuloListItemDto" TValue="int?"
+                                    ValueFieldName="@nameof(ArticuloListItemDto.Id)" TextFieldName="ComboTexto"
+                                    FilteringMode="DataGridFilteringMode.Contains" NullText="Busque por código o descripción..."
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Enabled="@(modelo.BodegaOrigenId > 0 && articulos.Count > 0)" CssClass="w-100" />
+                    </div>
+                    <DxButton Text="Agregar" IconCssClass="bi bi-plus-lg" RenderStyle="ButtonRenderStyle.Secondary"
+                              Click="AgregarRenglon" Enabled="@(articuloSeleccionado.HasValue)" />
+                    @if (modelo.BodegaOrigenId <= 0)
+                    { <span class="text-muted small ms-2"><i class="bi bi-info-circle me-1"></i>Elija primero la bodega de origen.</span> }
+                </div>
+            </div>
+        }
+
+        <div class="modern-card">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-semibold">Renglones</span>
+                <span class="text-muted small">@modelo.Detalles.Count renglón(es)</span>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr class="text-muted small">
+                            <th style="min-width:220px;">Artículo</th>
+                            <th class="text-end" style="width:110px;">@(EsLectura ? "Enviado" : "Cantidad")</th>
+                            @if (EsLectura)
+                            {
+                                <th class="text-end" style="width:100px;">Recibido</th>
+                                <th class="text-end" style="width:100px;">Pendiente</th>
+                                <th class="text-end" style="width:110px;">Exist. destino</th>
+                            }
+                            else
+                            {
+                                <th class="text-end" style="width:110px;">Exist. origen</th>
+                                <th style="width:50px;"></th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (modelo.Detalles.Count == 0)
+                        {
+                            <tr><td colspan="@(EsLectura ? 5 : 4)" class="text-center text-muted p-3">Sin renglones.</td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var d in modelo.Detalles)
+                            {
+                                <tr>
+                                    <td>
+                                        <span class="fw-semibold">@d.ArticuloId</span>
+                                        <span class="text-muted"> — @d.NombreArticulo</span>
+                                    </td>
+                                    <td class="text-end">
+                                        @if (EsLectura) { @d.Cantidad.ToString("N2") }
+                                        else { <DxSpinEdit @bind-Value="d.Cantidad" DisplayFormat="N2" MinValue="0" CssClass="w-100" /> }
+                                    </td>
+                                    @if (EsLectura)
+                                    {
+                                        <td class="text-end">@d.CantidadRecibida.ToString("N2")</td>
+                                        <td class="text-end fw-semibold">@((d.Cantidad - d.CantidadRecibida).ToString("N2"))</td>
+                                        <td class="text-end text-muted">@(d.ExistenciaDestino?.ToString("N2") ?? "—")</td>
+                                    }
+                                    else
+                                    {
+                                        <td class="text-end text-muted">@(d.ExistenciaOrigen?.ToString("N2") ?? "—")</td>
+                                        <td class="text-center">
+                                            <button type="button" class="btn-icon btn-delete" title="Quitar" @onclick="() => QuitarRenglon(d)">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr class="fw-semibold">
+                            <td class="text-end">Valor del traslado</td>
+                            <td class="text-end" colspan="@(EsLectura ? 4 : 3)">L. @modelo.Total.ToString("N2")</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            @if (!EsLectura)
+            {
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                    <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                              Click="@(() => Navigation.NavigateTo("/almacen/traslados"))" Enabled="@(!guardando)" />
+                    <DxButton Text="@(esDirecto ? "Enviar y recibir (directo)" : "Enviar a tránsito")" IconCssClass="bi bi-truck"
+                              RenderStyle="ButtonRenderStyle.Primary" Click="GuardarAsync" Enabled="@(!guardando)" />
+                </div>
+            }
+            else if (modelo.Estado == EstadoMovimientoAlmacen.EnTransito)
+            {
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                    <DxButton Text="Recibir" IconCssClass="bi bi-box-arrow-in-down" RenderStyle="ButtonRenderStyle.Primary"
+                              Click="AbrirRecepcion" />
+                </div>
+            }
+        </div>
+
+        @if (EsLectura && modelo.Recepciones.Count > 0)
+        {
+            <div class="modern-card mt-3">
+                <div class="fw-semibold mb-2">Recepciones (@modelo.Recepciones.Count)</div>
+                @foreach (var r in modelo.Recepciones)
+                {
+                    <div class="border rounded p-2 mb-2 d-flex justify-content-between align-items-start gap-2">
+                        <div>
+                            <div class="small text-muted mb-1">
+                                <i class="bi bi-box-arrow-in-down me-1"></i>
+                                @r.Fecha.ToString("dd/MM/yyyy") · @r.UsuarioCreacion
+                                @if (!string.IsNullOrWhiteSpace(r.Observaciones)) { <span> · @r.Observaciones</span> }
+                            </div>
+                            <div class="small">
+                                @string.Join(" · ", r.Lineas.Select(l => $"{l.NombreArticulo}: {l.Cantidad:N2}"))
+                            </div>
+                        </div>
+                        <DxButton Text="Imprimir" IconCssClass="bi bi-printer" RenderStyle="ButtonRenderStyle.Secondary"
+                                  RenderStyleMode="ButtonRenderStyleMode.Outline" Click="@(() => MostrarRecepcion(r.Id))" />
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+<DxPopup @bind-Visible="recepcionVisible" Width="min(620px, 95vw)" HeaderText="Recibir traslado" ShowFooter="false">
+    <BodyTemplate>
+        <div class="p-3">
+            <p class="text-muted small">
+                Indique cuánto llega en esta tanda. Puede recibir parcial: lo que quede seguirá en tránsito.
+            </p>
+            <div style="overflow-x:auto;">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr class="text-muted small">
+                            <th style="min-width:200px;">Artículo</th>
+                            <th class="text-end" style="width:110px;">Pendiente</th>
+                            <th class="text-end" style="width:140px;">Recibir ahora</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var l in recepcionLineas)
+                        {
+                            <tr>
+                                <td>@l.Nombre</td>
+                                <td class="text-end text-muted">@l.Pendiente.ToString("N2")</td>
+                                <td class="text-end">
+                                    <DxSpinEdit @bind-Value="l.Recibir" DisplayFormat="N2" MinValue="0" MaxValue="@l.Pendiente" CssClass="w-100" />
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="d-flex justify-content-end gap-2 mt-2">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="@(() => recepcionVisible = false)" Enabled="@(!recibiendo)" />
+                <DxButton Text="Confirmar recepción" IconCssClass="bi bi-check-lg" RenderStyle="ButtonRenderStyle.Primary"
+                          Click="ConfirmarRecepcionAsync" Enabled="@(!recibiendo)" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+<PdfPreviewPopup @ref="pdfPopup" />
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private TrasladoDto modelo = new();
+    private PdfPreviewPopup? pdfPopup;
+    private DateTime? fecha = DateTime.Today;
+
+    private List<TipoMovimientoAlmacenListItemDto> tipos = new();
+    private List<BodegaLookupDto> bodegas = new();
+    private List<ArticuloListItemDto> articulos = new();
+    private int? articuloSeleccionado;
+
+    private bool cargando = true, guardando;
+    private bool esDirecto;   // inverso de modelo.RequiereRecepcion
+
+    // Control del ciclo de vida (ver OnParametersSetAsync): los catálogos se cargan una vez y el
+    // modelo se (re)carga cada vez que cambia Id. Sentinel int.MinValue (nunca un Id real ni el
+    // null de "nuevo") para forzar la primera carga.
+    private bool _catalogosCargados;
+    private int? _modeloCargadoId = int.MinValue;
+
+    private bool recepcionVisible, recibiendo;
+    private List<RecepcionLineaEdit> recepcionLineas = new();
+    private Guid actoRecepcionUuid;   // idempotencia del ACTO de recepción; se fija al abrir el popup
+
+    private bool EsLectura => Id.HasValue;
+    private IEnumerable<BodegaLookupDto> BodegasDestino => bodegas.Where(b => b.Id != modelo.BodegaOrigenId);
+    private decimal PorcentajeRecibido
+    {
+        get
+        {
+            var env = modelo.Detalles.Sum(d => d.Cantidad);
+            return env > 0 ? Math.Round(modelo.Detalles.Sum(d => d.CantidadRecibida) / env * 100m, 1) : 0m;
+        }
+    }
+
+    // La carga vive aquí (no en OnInitializedAsync) porque al enviar un traslado nuevo se navega de
+    // "/almacen/traslados/nuevo" a "/almacen/traslados/{id}" REUSANDO este mismo componente:
+    // OnInitializedAsync no se vuelve a disparar, pero OnParametersSetAsync sí, así que el detalle
+    // muestra el estado real (En tránsito / Recibido) sin que el usuario tenga que refrescar.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_catalogosCargados)
+        {
+            try
+            {
+                var todos = await TiposClient.GetAsync(soloActivos: true);
+                tipos = todos.Where(t => t.Clase == ClaseMovimientoInventario.Traslado).ToList();
+            }
+            catch { tipos = new(); }
+            try { bodegas = await BodegasClient.GetLookupAsync(); } catch { bodegas = new(); }
+            _catalogosCargados = true;
+        }
+
+        if (Id != _modeloCargadoId)
+        {
+            _modeloCargadoId = Id;
+            await CargarModeloAsync();
+        }
+    }
+
+    private async Task CargarModeloAsync()
+    {
+        cargando = true;
+        if (EsLectura)
+        {
+            var doc = await TrasladosClient.GetByIdAsync(Id!.Value);
+            if (doc is null) Toast("Error", "El traslado no existe.", ToastRenderStyle.Danger);
+            else { modelo = doc; fecha = doc.Fecha?.ToDateTime(TimeOnly.MinValue) ?? DateTime.Today; esDirecto = !doc.RequiereRecepcion; }
+        }
+        else
+        {
+            // Alta nueva: parte de un modelo limpio (por si se reusó el componente tras ver un detalle).
+            modelo = new() { RequiereRecepcion = true };   // por defecto con recepción
+            fecha = DateTime.Today;
+            esDirecto = false;
+            articulos = new();
+            articuloSeleccionado = null;
+            if (tipos.Count == 1) modelo.TipoMovimientoId = tipos[0].Id;   // normalmente solo TRF
+        }
+        cargando = false;
+    }
+
+    private void OnDirectoChanged(bool v) { esDirecto = v; modelo.RequiereRecepcion = !v; }
+
+    private async Task OnOrigenChanged(int? v)
+    {
+        modelo.BodegaOrigenId = v ?? 0;
+        modelo.Detalles.Clear();
+        articuloSeleccionado = null;
+        articulos = modelo.BodegaOrigenId > 0 ? await CargarArticulosAsync(modelo.BodegaOrigenId) : new();
+    }
+
+    private async Task<List<ArticuloListItemDto>> CargarArticulosAsync(int bodegaId)
+    {
+        try { return await ArticulosClient.GetAsync(new ArticuloFilterDto { BodegaId = bodegaId }); }
+        catch { return new(); }
+    }
+
+    private void AgregarRenglon()
+    {
+        if (!articuloSeleccionado.HasValue) return;
+        if (modelo.Detalles.Any(d => d.ArticuloId == articuloSeleccionado.Value))
+        {
+            Toast("Aviso", "Ese artículo ya está en un renglón.", ToastRenderStyle.Warning);
+            return;
+        }
+        var art = articulos.FirstOrDefault(a => a.Id == articuloSeleccionado.Value);
+        if (art is null) return;
+        modelo.Detalles.Add(new TrasladoDetalleDto
+        {
+            ArticuloId = art.Id,
+            CodigoArticulo = art.Codigo,
+            NombreArticulo = art.Descripcion,
+            Cantidad = 0m,
+            // Stock de la bodega de ORIGEN (los artículos se cargan filtrando por esa bodega),
+            // no el rollup global del artículo, que sobreestimaría lo disponible para el envío.
+            ExistenciaOrigen = art.ExistenciaEnBodega ?? art.Existencia
+        });
+        articuloSeleccionado = null;
+    }
+
+    private void QuitarRenglon(TrasladoDetalleDto d) => modelo.Detalles.Remove(d);
+
+    private async Task GuardarAsync()
+    {
+        if (modelo.TipoMovimientoId <= 0) { Toast("Error", "Seleccione el tipo de traslado.", ToastRenderStyle.Warning); return; }
+        if (modelo.BodegaOrigenId <= 0) { Toast("Error", "Seleccione la bodega de origen.", ToastRenderStyle.Warning); return; }
+        if (modelo.BodegaDestinoId <= 0) { Toast("Error", "Seleccione la bodega de destino.", ToastRenderStyle.Warning); return; }
+        if (modelo.BodegaOrigenId == modelo.BodegaDestinoId) { Toast("Error", "El origen y el destino no pueden ser la misma bodega.", ToastRenderStyle.Warning); return; }
+        if (string.IsNullOrWhiteSpace(modelo.Motivo)) { Toast("Error", "El motivo es obligatorio.", ToastRenderStyle.Warning); return; }
+        if (modelo.Detalles.Count == 0) { Toast("Error", "Agregue al menos un renglón.", ToastRenderStyle.Warning); return; }
+        if (modelo.Detalles.Any(d => d.Cantidad <= 0m)) { Toast("Error", "Toda cantidad debe ser mayor que cero.", ToastRenderStyle.Warning); return; }
+
+        modelo.Fecha = DateOnly.FromDateTime(fecha ?? DateTime.Today);
+        // Idempotencia (contrato R-16): uuid ESTABLE por operación, no por clic. Si un envío tuvo
+        // éxito en el servidor pero se perdió la respuesta (timeout) y el usuario reintenta, se
+        // reusa el mismo uuid y el servicio corta el duplicado. ??= lo fija una sola vez; cada
+        // navegación a "/almacen/traslados/nuevo" reinicia el componente con Uuid = null.
+        modelo.Uuid ??= Guid.NewGuid();
+
+        guardando = true;
+        try
+        {
+            var creado = await TrasladosClient.EnviarAsync(modelo);
+            Toast("Éxito", $"Traslado {creado.Numero:00000} registrado.", ToastRenderStyle.Success);
+            Navigation.NavigateTo($"/almacen/traslados/{creado.Id}");
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { guardando = false; }
+    }
+
+    private void AbrirRecepcion()
+    {
+        recepcionLineas = modelo.Detalles
+            .Where(d => d.Cantidad - d.CantidadRecibida > 0m)
+            .Select(d => new RecepcionLineaEdit
+            {
+                MovimientoDtlId = d.Id,
+                Nombre = $"{d.ArticuloId} — {d.NombreArticulo}",
+                Pendiente = d.Cantidad - d.CantidadRecibida,
+                Recibir = d.Cantidad - d.CantidadRecibida   // por defecto, todo lo pendiente
+            }).ToList();
+        actoRecepcionUuid = Guid.NewGuid();   // un acto por apertura del popup; reintentos del confirm lo reusan
+        recepcionVisible = true;
+    }
+
+    private async Task ConfirmarRecepcionAsync()
+    {
+        var lineas = recepcionLineas.Where(l => l.Recibir > 0m)
+            .Select(l => new RecepcionTrasladoLineaDto { MovimientoDtlId = l.MovimientoDtlId, Cantidad = l.Recibir })
+            .ToList();
+        if (lineas.Count == 0) { Toast("Aviso", "Indique al menos una cantidad a recibir.", ToastRenderStyle.Warning); return; }
+
+        recibiendo = true;
+        try
+        {
+            var actualizado = await TrasladosClient.RecibirAsync(modelo.Id,
+                new RecepcionTrasladoDto { Uuid = actoRecepcionUuid, Fecha = DateOnly.FromDateTime(DateTime.Today), Lineas = lineas });
+            modelo = actualizado;
+            esDirecto = !modelo.RequiereRecepcion;
+            recepcionVisible = false;
+            Toast("Éxito", modelo.Estado == EstadoMovimientoAlmacen.Recibido
+                ? "Traslado recibido por completo." : "Recepción parcial registrada.", ToastRenderStyle.Success);
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { recibiendo = false; }
+    }
+
+    private string EstadoTexto => modelo.Estado switch
+    {
+        EstadoMovimientoAlmacen.EnTransito => "En tránsito",
+        EstadoMovimientoAlmacen.Recibido => "Recibido",
+        EstadoMovimientoAlmacen.Anulado => "Anulado",
+        _ => "Registrado"
+    };
+    private string EstadoAlertClass => modelo.Estado switch
+    {
+        EstadoMovimientoAlmacen.EnTransito => "alert-warning",
+        EstadoMovimientoAlmacen.Recibido => "alert-success",
+        EstadoMovimientoAlmacen.Anulado => "alert-danger",
+        _ => "alert-secondary"
+    };
+    private string EstadoIcon => modelo.Estado switch
+    {
+        EstadoMovimientoAlmacen.EnTransito => "bi-truck",
+        EstadoMovimientoAlmacen.Recibido => "bi-check-circle",
+        EstadoMovimientoAlmacen.Anulado => "bi-x-circle",
+        _ => "bi-info-circle"
+    };
+
+    private void MostrarTraslado()
+        => pdfPopup?.Mostrar(TrasladosClient.GetComprobantePdfUrl(modelo.Id),
+            $"Comprobante — Traslado {modelo.Numero:00000}");
+
+    private void MostrarRecepcion(int recepcionId)
+        => pdfPopup?.Mostrar(TrasladosClient.GetRecepcionComprobantePdfUrl(modelo.Id, recepcionId),
+            $"Recepción — Traslado {modelo.Numero:00000}");
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = "TrasFormToast" });
+
+    private sealed class RecepcionLineaEdit
+    {
+        public int MovimientoDtlId { get; set; }
+        public string Nombre { get; set; } = string.Empty;
+        public decimal Pendiente { get; set; }
+        public decimal Recibir { get; set; }
+    }
+}

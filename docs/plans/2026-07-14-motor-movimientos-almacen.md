@@ -144,7 +144,7 @@ COMMIT;
 
 Run:
 ```bash
-PGPASSWORD='Koala@2021' psql -h localhost -U postgres -d siad_v3_restore -v ON_ERROR_STOP=1 \
+PGPASSWORD='<password>' psql -h localhost -U postgres -d siad_v3_restore -v ON_ERROR_STOP=1 \
   -f Database/2026-07-14_alm_kardex_trazabilidad.sql
 ```
 Expected: `BEGIN / ALTER TABLE / CREATE INDEX / … / COMMIT`

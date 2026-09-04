@@ -1,0 +1,408 @@
+@page "/facturacion/emision-lectura"
+@attribute [Authorize(Policy = PermissionNames.Ventas.EmisionLectura.View)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Facturacion
+@using SIAD.Core.DTOs.CondicionesLectura
+@using apc.Client.Services.Facturacion
+@using apc.Client.Services.CondicionesLectura
+
+@inject EmisionLecturaClient Client
+@inject CondicionesLecturaClient CondicionesClient
+@inject TenantState TenantState
+@inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Emitir factura de lectura</PageTitle>
+
+<DxToastProvider Name="EmisionLecturaToast" MaxToastCount="4" StickToViewport="true" />
+
+<div class="emision-lectura">
+
+    @* ── Encabezado ── *@
+    <div class="d-flex align-items-start flex-wrap gap-3 mb-3">
+        <div class="flex-grow-1">
+            <h4 class="mb-1 fw-bold text-secondary">
+                <i class="bi bi-receipt-cutoff me-2 text-primary"></i>Emitir factura de lectura
+            </h4>
+            <small class="text-muted">
+                Captura la lectura de un abonado y emite su factura desde el portal, con folio
+                propio. Para refacturar, primero anule la factura anterior con una nota de crédito.
+            </small>
+        </div>
+        @if (bloque is not null)
+        {
+            <div class="text-end flex-shrink-0">
+                <div class="small text-muted">Folios disponibles</div>
+                <div class="fw-bold @(bloque.Disponibles <= 20 ? "text-danger" : "text-secondary")">
+                    @bloque.Disponibles
+                </div>
+                <div class="small text-muted">próximo: @bloque.CorrelativoSiguiente</div>
+            </div>
+        }
+    </div>
+
+    @if (errorBloque is not null)
+    {
+        <div class="alert alert-warning d-flex align-items-start gap-2" role="alert">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <div>
+                <strong>No hay folios disponibles para el portal.</strong>
+                <div class="small">@errorBloque</div>
+            </div>
+        </div>
+    }
+
+    <div class="row g-3">
+
+        @* ── Captura ── *@
+        <div class="col-12 col-lg-5">
+            <div class="card h-100">
+                <div class="card-header fw-semibold">Lectura</div>
+                <div class="card-body d-flex flex-column gap-3">
+
+                    <div>
+                        <label class="form-label small text-muted mb-1">Clave del abonado</label>
+                        <DxTextBox @bind-Text="clave"
+                                   NullText="Ej. 010101001"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                    </div>
+
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label small text-muted mb-1">Año</label>
+                            <DxSpinEdit @bind-Value="anio" MinValue="2000" MaxValue="2100" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small text-muted mb-1">Mes</label>
+                            <DxSpinEdit @bind-Value="mes" MinValue="1" MaxValue="12" />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="form-label small text-muted mb-1">Condición de lectura</label>
+                        <DxComboBox Data="condiciones"
+                                    @bind-Value="condicion"
+                                    TextFieldName="@nameof(CondicionLecturaAdminDto.Descripcion)"
+                                    ValueFieldName="@nameof(CondicionLecturaAdminDto.Codigo)"
+                                    NullText="Normal" />
+                    </div>
+
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label small text-muted mb-1">Lectura actual</label>
+                            <DxSpinEdit @bind-Value="lecturaActual" MinValue="0" NullText="—" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small text-muted mb-1">Promedio</label>
+                            <DxSpinEdit @bind-Value="lecturaPromedio" MinValue="0" NullText="—" />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="form-label small text-muted mb-1">Fecha de lectura</label>
+                        <DxDateEdit @bind-Date="fechaLectura" />
+                    </div>
+
+                    <div>
+                        <label class="form-label small text-muted mb-1">Observación</label>
+                        <DxTextBox @bind-Text="observacion" NullText="Opcional" />
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <DxButton Text="Calcular"
+                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                  IconCssClass="bi bi-calculator"
+                                  Enabled="@(!ocupado && !string.IsNullOrWhiteSpace(clave))"
+                                  Click="CalcularAsync" />
+                        <DxButton Text="Emitir factura"
+                                  RenderStyle="ButtonRenderStyle.Primary"
+                                  IconCssClass="bi bi-receipt"
+                                  Enabled="@PuedeEmitir"
+                                  Click="ConfirmarEmisionAsync" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* ── Lo que se va a facturar ── *@
+        <div class="col-12 col-lg-7">
+            <div class="card h-100">
+                <div class="card-header fw-semibold">Lo que se va a facturar</div>
+                <div class="card-body">
+
+                    @if (preview is null)
+                    {
+                        <div class="text-muted small py-4 text-center">
+                            Escriba la clave del abonado y pulse <strong>Calcular</strong> para ver
+                            el detalle antes de emitir.
+                        </div>
+                    }
+                    else if (!preview.Encontrado)
+                    {
+                        <div class="alert alert-danger mb-0" role="alert">@preview.Mensaje</div>
+                    }
+                    else
+                    {
+                        <div class="mb-3">
+                            <div class="fw-bold">@preview.ClienteNombre</div>
+                            <div class="small text-muted">
+                                Clave @preview.ClienteClave
+                                @if (!string.IsNullOrWhiteSpace(preview.Ciclo))
+                                {
+                                    <span> · ciclo @preview.Ciclo</span>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(preview.Ruta))
+                                {
+                                    <span> · ruta @preview.Ruta</span>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(preview.Contador))
+                                {
+                                    <span> · medidor @preview.Contador</span>
+                                }
+                            </div>
+                        </div>
+
+                        @if (preview.FacturaVigente is not null)
+                        {
+                            <div class="alert alert-warning d-flex align-items-start gap-2" role="alert">
+                                <i class="bi bi-exclamation-triangle-fill"></i>
+                                <div>
+                                    <strong>Ya tiene la factura @preview.FacturaVigente en este período.</strong>
+                                    <div class="small">
+                                        Anúlela con una nota de crédito antes de volver a facturar.
+                                        El folio de la anulada no se reutiliza: la nueva lleva folio propio.
+                                    </div>
+                                </div>
+                            </div>
+                        }
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-4">
+                                <div class="small text-muted">Lectura anterior</div>
+                                <div class="fw-semibold">@preview.LecturaAnterior.ToString("N0")</div>
+                            </div>
+                            <div class="col-4">
+                                <div class="small text-muted">Lectura actual</div>
+                                <div class="fw-semibold">@preview.LecturaActualEfectiva.ToString("N0")</div>
+                            </div>
+                            <div class="col-4">
+                                <div class="small text-muted">Consumo</div>
+                                <div class="fw-semibold">@preview.ConsumoFacturable.ToString("N0") m³</div>
+                            </div>
+                        </div>
+
+                        <table class="table table-sm mb-0">
+                            <tbody>
+                                <tr>
+                                    <td class="text-muted">Servicios</td>
+                                    <td class="text-end">@preview.SubtotalServicios.ToString("N2")</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">Ajustes</td>
+                                    <td class="text-end">@preview.SubtotalAjustes.ToString("N2")</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">Saldos anteriores</td>
+                                    <td class="text-end">@preview.SaldosAnteriores.ToString("N2")</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">Recargos</td>
+                                    <td class="text-end">@preview.Recargos.ToString("N2")</td>
+                                </tr>
+                                <tr class="fw-bold border-top">
+                                    <td>Total</td>
+                                    <td class="text-end">@preview.TotalFactura.ToString("N2")</td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        @if (preview.FechaVencimiento is not null)
+                        {
+                            <div class="small text-muted mt-2">
+                                Vence el @preview.FechaVencimiento.Value.ToString("dd/MM/yyyy")
+                            </div>
+                        }
+
+                        @if (preview.Warnings.Count > 0)
+                        {
+                            <ul class="small text-muted mt-3 mb-0">
+                                @foreach (var aviso in preview.Warnings)
+                                {
+                                    <li>@aviso</li>
+                                }
+                            </ul>
+                        }
+                    }
+
+                    @if (emitida is not null)
+                    {
+                        <div class="alert @(emitida.Success ? "alert-success" : "alert-danger") mt-3 mb-0" role="alert">
+                            @if (emitida.Success)
+                            {
+                                <strong>Factura @emitida.NumeroFactura emitida.</strong>
+                                <div class="small">
+                                    Total @emitida.Total.ToString("N2") · correlativo @emitida.CorrelativoCai
+                                </div>
+                            }
+                            else
+                            {
+                                <strong>No se emitió.</strong>
+                                <div class="small">@emitida.Mensaje</div>
+                            }
+                            @if (emitida.Warnings.Count > 0)
+                            {
+                                <ul class="small mt-2 mb-0">
+                                    @foreach (var aviso in emitida.Warnings)
+                                    {
+                                        <li>@aviso</li>
+                                    }
+                                </ul>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Emitir consume un folio fiscal y no se deshace: se confirma antes. *@
+<DxMessageBox @bind-Visible="confirmacionVisible"
+              Type="MessageBoxType.Confirmation"
+              Title="Emitir la factura"
+              Text="@textoConfirmacion"
+              OkButtonText="Emitir"
+              CancelButtonText="Cancelar"
+              OkClick="EmitirAsync" />
+
+@code {
+    private string? clave;
+    private int anio = DateTime.Today.Year;
+    private int mes = DateTime.Today.Month;
+    private string condicion = "N";
+    private decimal? lecturaActual;
+    private decimal? lecturaPromedio;
+    private DateTime? fechaLectura = DateTime.Today;
+    private string? observacion;
+
+    private BloqueCaiPortalDto? bloque;
+    private string? errorBloque;
+    private PreviewFacturaLecturaDto? preview;
+    private EmitirFacturaLecturaResultado? emitida;
+    private List<CondicionLecturaAdminDto> condiciones = [];
+
+    private bool ocupado;
+    private bool confirmacionVisible;
+
+    private string textoConfirmacion =>
+        preview is null
+            ? "¿Emitir la factura?"
+            : $"Se emitirá la factura de {preview.ClienteNombre} por {preview.TotalFactura:N2}. " +
+              "El folio queda consumido aunque después se anule.";
+
+    // Sólo se emite sobre un cálculo hecho y sin factura viva del período: emitir a ciegas
+    // gastaría un correlativo que no se recicla.
+    private bool PuedeEmitir =>
+        !ocupado
+        && preview is { Encontrado: true, FacturaVigente: null }
+        && errorBloque is null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var companyId = await TenantState.EnsureCompanyAsync();
+
+        try
+        {
+            var catalogo = await CondicionesClient.ObtenerAsync(companyId);
+            condiciones = catalogo.Condiciones.FindAll(c => c.Activo);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or UnauthorizedAccessException)
+        {
+            // Sin catálogo se sigue pudiendo facturar con la condición normal.
+            condiciones = [];
+        }
+
+        await CargarBloqueAsync();
+    }
+
+    private async Task CargarBloqueAsync()
+    {
+        bloque = await Client.ObtenerBloqueAsync();
+        errorBloque = bloque is null
+            ? "Revise que exista un CAI vigente de facturación para la empresa."
+            : null;
+    }
+
+    private async Task CalcularAsync()
+    {
+        ocupado = true;
+        emitida = null;
+        try
+        {
+            preview = await Client.PrevisualizarAsync(Construir());
+        }
+        finally
+        {
+            ocupado = false;
+        }
+    }
+
+    private Task ConfirmarEmisionAsync()
+    {
+        confirmacionVisible = true;
+        return Task.CompletedTask;
+    }
+
+    private async Task EmitirAsync()
+    {
+        ocupado = true;
+        try
+        {
+            emitida = await Client.EmitirAsync(Construir());
+
+            if (emitida.Success)
+            {
+                ToastService.ShowToast(new ToastOptions
+                {
+                    ProviderName = "EmisionLecturaToast",
+                    ThemeMode = ToastThemeMode.Pastel,
+                    RenderStyle = ToastRenderStyle.Success,
+                    Title = "Factura emitida",
+                    Text = $"{emitida.NumeroFactura} · {emitida.Total:N2}",
+                });
+
+                // El período ya tiene factura: se recalcula para que la pantalla lo refleje y
+                // no deje volver a emitir por accidente.
+                preview = await Client.PrevisualizarAsync(Construir());
+                await CargarBloqueAsync();
+            }
+            else
+            {
+                ToastService.ShowToast(new ToastOptions
+                {
+                    ProviderName = "EmisionLecturaToast",
+                    ThemeMode = ToastThemeMode.Pastel,
+                    RenderStyle = ToastRenderStyle.Danger,
+                    Title = "No se emitió",
+                    Text = emitida.Mensaje,
+                });
+            }
+        }
+        finally
+        {
+            ocupado = false;
+        }
+    }
+
+    private EmitirFacturaLecturaRequest Construir() => new()
+    {
+        Clave = clave ?? string.Empty,
+        Anio = anio,
+        Mes = mes,
+        LecturaActual = lecturaActual,
+        CondicionLectura = string.IsNullOrWhiteSpace(condicion) ? "N" : condicion,
+        FechaLectura = fechaLectura,
+        LecturaPromedio = lecturaPromedio,
+        Observacion = observacion,
+    };
+}

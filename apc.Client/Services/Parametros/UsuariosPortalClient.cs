@@ -107,4 +107,30 @@ public sealed class UsuariosPortalClient
             throw new HttpRequestException("No fue posible actualizar el usuario.", ex);
         }
     }
+
+    /// <summary>
+    /// Restablece la contraseña de un usuario. Si <paramref name="password"/> es null, la genera el
+    /// servidor. La contraseña devuelta solo se puede mostrar una vez: no queda almacenada.
+    /// </summary>
+    public async Task<RestablecerPasswordResultadoDto> RestablecerPasswordAsync(
+        string id, string? password = null, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+
+        var response = await http.PostAsJsonAsyncWithAuthCheck(
+            $"api/parametros/usuarios/{id}/password",
+            new RestablecerPasswordDto { Password = password },
+            ct);
+
+        var resultado = await response.ReadFromJsonAsyncWithAuthCheck<RestablecerPasswordResultadoDto>(ct);
+        return resultado ?? throw new HttpRequestException("El servidor no devolvió la contraseña restablecida.");
+    }
+
+    public async Task EliminarAsync(string id, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+
+        var response = await http.DeleteAsync($"api/parametros/usuarios/{id}", ct);
+        await response.ReadFromJsonAsyncWithAuthCheck<object>(ct);
+    }
 }

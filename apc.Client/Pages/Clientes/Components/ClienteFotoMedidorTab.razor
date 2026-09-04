@@ -3,7 +3,7 @@
 @inject IToastNotificationService ToastService
 
 <div class="cliente-foto-medidor-container">
-    <DxToastProvider Name="FotoMedidorToast" MaxToastCount="3" />
+    <DxToastProvider Name="FotoMedidorToast" MaxToastCount="3" StickToViewport="true" />
 
     @if (isLoading)
     {

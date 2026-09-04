@@ -6,7 +6,7 @@
 @inject IToastNotificationService ToastService
 
 <div class="cliente-servicios-tarifario-container">
-    <DxToastProvider Name="ServiciosTarifarioToast" MaxToastCount="3" />
+    <DxToastProvider Name="ServiciosTarifarioToast" MaxToastCount="3" StickToViewport="true" />
 
     @if (isLoading)
     {

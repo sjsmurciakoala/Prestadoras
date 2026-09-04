@@ -14,9 +14,33 @@ public partial class SiadDbContext
     public virtual DbSet<adm_tipo_ajuste_tarifario> adm_tipo_ajuste_tarifarios { get; set; } = null!;
     public virtual DbSet<adm_cuadro_tarifario> adm_cuadro_tarifarios { get; set; } = null!;
     public virtual DbSet<adm_ajuste_tarifario> adm_ajuste_tarifarios { get; set; } = null!;
+    public virtual DbSet<cfg_formato_fiscal> cfg_formato_fiscals { get; set; } = null!;
 
     private void ConfigureMantenimientosModel(ModelBuilder modelBuilder)
     {
+        // Formatos fiscales (2026-08-22): máscara del No. de factura SAR y del CAI que se
+        // transcriben del proveedor. Ver Database/2026-08-22_cfg_formato_fiscal.sql.
+        modelBuilder.Entity<cfg_formato_fiscal>(entity =>
+        {
+            entity.HasKey(e => e.id).HasName("cfg_formato_fiscal_pkey");
+            entity.ToTable("cfg_formato_fiscal", "public");
+            entity.HasIndex(e => new { e.company_id, e.codigo }, "uq_cfg_formato_fiscal_company_codigo").IsUnique();
+            entity.HasIndex(e => e.company_id, "ix_cfg_formato_fiscal_company");
+            entity.Property(e => e.codigo).HasMaxLength(30);
+            entity.Property(e => e.nombre).HasMaxLength(60);
+            entity.Property(e => e.mascara).HasMaxLength(80);
+            entity.Property(e => e.patron).HasMaxLength(200);
+            entity.Property(e => e.modo_validacion).HasDefaultValue((short)3);
+            entity.Property(e => e.obligatorio).HasDefaultValue(false);
+            entity.Property(e => e.normalizar).HasDefaultValue(true);
+            entity.Property(e => e.mayusculas).HasDefaultValue(true);
+            entity.Property(e => e.activo).HasDefaultValue(true);
+            entity.Property(e => e.usuariocreacion).HasMaxLength(100);
+            entity.Property(e => e.usuariomodificacion).HasMaxLength(100);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
+        });
+
         modelBuilder.Entity<cfg_recargo_mora>(entity =>
         {
             entity.HasKey(e => e.company_id).HasName("cfg_recargo_mora_pkey");

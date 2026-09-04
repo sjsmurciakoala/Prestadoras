@@ -1,14 +1,17 @@
 ﻿@page "/proveedores/nuevo"
 @page "/proveedores/{codigo}/editar"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Proveedores.Create)]
 @inject ProveedoresClient ProveedoresClient
+@inject TerminosPagoClient TerminosPagoClient
 @inject NavigationManager Navigation
 @inject ILogger<ProveedorEdit> Logger
 @inject IToastNotificationService ToastService
 @using apc.Client.Services.Proveedores
+@using apc.Client.Services.Almacen
 @using Microsoft.AspNetCore.Authorization
 @using SIAD.Core.DTOs.Contabilidad
 @using SIAD.Core.DTOs.Proveedores
+@using SIAD.Core.DTOs.Almacen
 
 <PageTitle>SIAD - Editar Proveedor</PageTitle>
 
@@ -43,6 +46,7 @@
                            Bancos="bancos"
                            CuentasContables="cuentasContables"
                            TiposContacto="tiposContacto"
+                           TerminosPago="terminosPago"
                            IsEdit="IsEdit"
                            OnValidSubmit="GuardarAsync"
                            OnInvalidSubmit="MostrarErroresValidacion"
@@ -62,6 +66,7 @@
     private readonly List<ProveedorBancoLookupDto> bancos = new();
     private readonly List<CuentaContableLookupDto> cuentasContables = new();
     private readonly List<TipoContactoLookupDto> tiposContacto = new();
+    private readonly List<TerminoPagoLookupDto> terminosPago = new();
     private ProveedorUpsertDto model = new();
     private bool isLoading = true;
     private bool isSaving;
@@ -108,7 +113,8 @@
                 CargarTiposAsync(),
                 CargarTiposContactoAsync(),
                 CargarBancosAsync(),
-                CargarCuentasContablesAsync());
+                CargarCuentasContablesAsync(),
+                CargarTerminosPagoAsync());
             if (IsEdit)
             {
                 await CargarProveedorAsync();
@@ -156,6 +162,13 @@
         var data = await ProveedoresClient.ObtenerCuentasContablesAsync();
         cuentasContables.Clear();
         cuentasContables.AddRange(data ?? Array.Empty<CuentaContableLookupDto>());
+    }
+
+    private async Task CargarTerminosPagoAsync()
+    {
+        var data = await TerminosPagoClient.GetLookupAsync();
+        terminosPago.Clear();
+        terminosPago.AddRange(data ?? new List<TerminoPagoLookupDto>());
     }
 
     private async Task CargarBancosAsync()
@@ -225,6 +238,7 @@
                     })
                     .ToList()
                 : new List<ProveedorCuentaBancariaDto> { CreateEmptyCuenta(1) },
+            TerminoPagoId = detail.TerminoPagoId,
             Activo = detail.Activo
         };
     }

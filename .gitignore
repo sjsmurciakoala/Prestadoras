@@ -117,3 +117,6 @@ apc/.build/
 
 # --- Config VS Code que SÍ se trackea ---
 !.vscode/mcp.json
+
+# CSS aislado de apc.Client copiado por CopiarCssAisladoDelCliente (artefacto de build)
+apc/wwwroot/apc.Client.styles.css

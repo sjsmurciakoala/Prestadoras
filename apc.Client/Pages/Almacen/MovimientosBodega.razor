@@ -1,0 +1,496 @@
+@page "/almacen/kardex-bodega"
+@attribute [Authorize(Policy = PermissionNames.Inventario.View)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject KardexClient KardexClient
+@inject BodegasClient BodegasClient
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Movimientos por bodega</PageTitle>
+
+<div class="page-container">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Movimientos por bodega</h2>
+            <p class="page-subtitle">Libro de entradas y salidas de una bodega (todos los artículos)</p>
+        </div>
+    </div>
+
+    <div class="modern-card mb-4">
+        <div class="d-flex flex-wrap gap-2 align-items-end">
+            <div style="min-width: 220px;">
+                <label class="filter-label">Bodega</label>
+                <DxComboBox Data="@bodegas" Value="@bodegaSeleccionada"
+                            ValueChanged="@((BodegaLookupDto? b) => OnBodegaChanged(b))"
+                            TextFieldName="@nameof(BodegaLookupDto.Display)"
+                            NullText="Seleccione una bodega..."
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            CssClass="w-100" />
+            </div>
+
+            <div style="min-width: 150px;">
+                <label class="filter-label">Desde</label>
+                <DxDateEdit Date="@fechaDesde" DateChanged="@((DateTime? d) => OnFechaDesdeChanged(d))"
+                            NullText="Todas" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="w-100" />
+            </div>
+
+            <div style="min-width: 150px;">
+                <label class="filter-label">Hasta</label>
+                <DxDateEdit Date="@fechaHasta" DateChanged="@((DateTime? d) => OnFechaHastaChanged(d))"
+                            NullText="Todas" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="w-100" />
+            </div>
+
+            <div style="min-width: 160px;">
+                <label class="filter-label">Tipo de movimiento</label>
+                <DxComboBox Data="@tipos" Value="@tipoSeleccionado"
+                            ValueChanged="@((TipoMovimientoDto? t) => OnTipoChanged(t))"
+                            TextFieldName="@nameof(TipoMovimientoDto.Descripcion)"
+                            NullText="Todos"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            CssClass="w-100" />
+            </div>
+
+            <div style="min-width: 240px; flex: 1 1 240px;">
+                <label class="filter-label">Buscar artículo o documento</label>
+                <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                           TextExpression="@(() => filtroBusqueda)"
+                           Placeholder="Código, descripción o documento..." InputDelay="600"
+                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="w-100" />
+            </div>
+
+            @if (TieneFiltrosSecundarios)
+            {
+                <div>
+                    <button type="button" class="filters-link" @onclick="LimpiarFiltros">
+                        <i class="bi bi-x-circle me-1"></i>Limpiar
+                    </button>
+                </div>
+            }
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    @if (bodegaSeleccionada is not null)
+    {
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-md-3">
+                <div class="modern-card summary-card">
+                    <div class="summary-label">Movimientos</div>
+                    <div class="summary-value">@resumen.TotalMovimientos.ToString("N0")</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="modern-card summary-card">
+                    <div class="summary-label">Entradas (cantidad)</div>
+                    <div class="summary-value text-success">@resumen.TotalIngresos.ToString("N2")</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="modern-card summary-card">
+                    <div class="summary-label">Salidas (cantidad)</div>
+                    <div class="summary-value text-danger">@resumen.TotalSalidas.ToString("N2")</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="modern-card summary-card">
+                    <div class="summary-label">Valor movido</div>
+                    <div class="summary-value">@resumen.ValorMovido.ToString("N2")</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modern-card position-relative">
+            <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+
+            <div class="grid-wrapper">
+                <DxGrid @ref="grid" Data="@dataSource" KeyFieldName="@nameof(MovimientoBodegaItemDto.Id)" PageSize="20"
+                        PageSizeSelectorVisible="true"
+                        PageSizeSelectorItems="new int[] { 10, 20, 50, 100 }"
+                        PagerPosition="GridPagerPosition.Bottom" ShowFilterRow="false" ShowSearchBox="false"
+                        ColumnResizeMode="GridColumnResizeMode.ColumnsContainer" FocusedRowEnabled="false"
+                        ShowGroupPanel="false" CssClass="grid-solicitudes"
+                        LayoutAutoSaving="OnLayoutAutoSaving"
+                        LayoutAutoLoading="OnLayoutAutoLoading">
+
+                    <ToolbarTemplate>
+                        <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                            <span class="fw-bold"><i class="bi bi-building me-1"></i>@bodegaSeleccionada.Display</span>
+
+                            <DxButton Text="Ver PDF" IconCssClass="bi bi-file-earmark-pdf"
+                                      RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarPdf" CssClass="ms-auto me-1" />
+                            <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                      RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+                            <DxButton Text="Excel" IconCssClass="bi bi-file-earmark-excel"
+                                      RenderStyle="ButtonRenderStyle.Secondary" Click="ExportExcelAsync" CssClass="me-3" />
+
+                            <div class="text-muted small">
+                                Total: <span class="fw-bold">@totalFilas.ToString("N0")</span>
+                            </div>
+                        </div>
+                    </ToolbarTemplate>
+
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(MovimientoBodegaItemDto.Fecha)" Caption="Fecha" Width="105px">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is MovimientoBodegaItemDto m)
+                                {
+                                    <span>@(m.Fecha.HasValue ? m.Fecha.Value.ToString("dd/MM/yyyy") : "—")</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(MovimientoBodegaItemDto.NumeroDocumento)" Caption="Doc." Width="85px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is MovimientoBodegaItemDto m)
+                                {
+                                    <span class="text-muted">@(m.NumeroDocumento.HasValue ? m.NumeroDocumento.Value.ToString("0") : "—")</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(MovimientoBodegaItemDto.TipoDescripcion)" Caption="Tipo" Width="110px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is MovimientoBodegaItemDto m)
+                                {
+                                    <span class="badge-mov @TipoCssClass(m.TipoTransaccion)">@m.TipoDescripcion</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(MovimientoBodegaItemDto.ArticuloDescripcion)" Caption="Artículo" MinWidth="240">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is MovimientoBodegaItemDto m)
+                                {
+                                    <div class="articulo-cell">
+                                        <div class="articulo-title" title="@m.ArticuloDescripcion">
+                                            @(string.IsNullOrWhiteSpace(m.ArticuloDescripcion) ? "(sin descripción)" : m.ArticuloDescripcion)
+                                        </div>
+                                        <div class="articulo-sub">
+                                            <i class="bi bi-upc"></i>
+                                            <span>@(string.IsNullOrWhiteSpace(m.ArticuloCodigo) ? "—" : m.ArticuloCodigo)</span>
+                                        </div>
+                                    </div>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(MovimientoBodegaItemDto.Ingresos)" Caption="Entradas" Width="105px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is MovimientoBodegaItemDto m)
+                                {
+                                    <span class="@(m.Ingresos > 0 ? "text-success fw-semibold" : "text-muted")">@(m.Ingresos > 0 ? m.Ingresos.ToString("N2") : "—")</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(MovimientoBodegaItemDto.Salidas)" Caption="Salidas" Width="105px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is MovimientoBodegaItemDto m)
+                                {
+                                    <span class="@(m.Salidas > 0 ? "text-danger fw-semibold" : "text-muted")">@(m.Salidas > 0 ? m.Salidas.ToString("N2") : "—")</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(MovimientoBodegaItemDto.ValorUnitario)" Caption="Valor unit." Width="105px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is MovimientoBodegaItemDto m)
+                                {
+                                    <span class="text-muted">@m.ValorUnitario.ToString("N2")</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(MovimientoBodegaItemDto.Total)" Caption="Total" Width="115px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is MovimientoBodegaItemDto m)
+                                {
+                                    <span class="text-dark fw-semibold">@m.Total.ToString("N2")</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        @* Costo promedio del par DESPUÉS del asiento.
+                           A diferencia del kardex por artículo, aquí se muestra el snapshot del motor
+                           y NO un promedio recalculado: el corrido es por par (artículo, bodega) y esta
+                           pantalla pagina en el servidor mezclando artículos, así que derivarlo exigiría
+                           recorrer el libro completo de la bodega en cada página. Por eso el histórico
+                           SIMAFI queda en "—" aquí y sí muestra costo en el kardex por artículo. *@
+                        <DxGridDataColumn FieldName="@nameof(MovimientoBodegaItemDto.CostoPromedioResultante)" Caption="Costo prom." Width="110px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is MovimientoBodegaItemDto m)
+                                {
+                                    @if (m.CostoPromedioResultante.HasValue)
+                                    {
+                                        <span class="fw-semibold">@m.CostoPromedioResultante.Value.ToString("N4")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted" title="Histórico migrado de SIMAFI: sin costo materializado. El kardex por artículo sí lo reconstruye.">—</span>
+                                    }
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        @* Saldo del artículo en ESTA bodega DESPUÉS del asiento (snapshot del motor).
+                           En el histórico SIMAFI no viene (no lo posteó el motor): se muestra "—". *@
+                        <DxGridDataColumn FieldName="@nameof(MovimientoBodegaItemDto.ExistenciaResultante)" Caption="Saldo" Width="110px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is MovimientoBodegaItemDto m)
+                                {
+                                    @if (m.ExistenciaResultante.HasValue)
+                                    {
+                                        <span class="text-dark fw-bold">@m.ExistenciaResultante.Value.ToString("N2")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted" title="Histórico migrado de SIMAFI: sin saldo materializado">—</span>
+                                    }
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        @* Documento origen: distingue una carga inicial o un traslado de una entrada
+                           cualquiera. En histórico SIMAFI viene vacío. *@
+                        <DxGridDataColumn Caption="Documento" Width="130px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is MovimientoBodegaItemDto m)
+                                {
+                                    @if (!string.IsNullOrWhiteSpace(m.DocumentoTipo))
+                                    {
+                                        <span class="text-muted small">@m.DocumentoTipo</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted" title="Histórico migrado de SIMAFI, no posteado por el motor">—</span>
+                                    }
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(MovimientoBodegaItemDto.UsuarioCreacion)" Caption="Usuario" Width="120px" Visible="false">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is MovimientoBodegaItemDto m)
+                                {
+                                    <span class="text-muted small">@(string.IsNullOrWhiteSpace(m.UsuarioCreacion) ? "—" : m.UsuarioCreacion)</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+
+                    <EmptyDataAreaTemplate>
+                        <div class="p-4 text-center text-muted">Esta bodega no tiene movimientos en el período seleccionado.</div>
+                    </EmptyDataAreaTemplate>
+                </DxGrid>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="modern-card text-center text-muted p-5">
+            <i class="bi bi-building" style="font-size: 2.5rem; opacity: 0.4;"></i>
+            <p class="mt-3 mb-0">Seleccione una bodega para ver su libro de movimientos.</p>
+        </div>
+    }
+
+    <PdfPreviewPopup @ref="pdfPopup" />
+</div>
+
+@code {
+    private const string GridLayoutStorageKey = "almacen-kardex-bodega-grid-layout";
+
+    private DxGrid? grid;
+    private PdfPreviewPopup? pdfPopup;
+
+    // El grid pagina/ordena en el servidor (fuente remota); no se carga todo el kardex en memoria.
+    private MovimientosBodegaGridDataSource dataSource = default!;
+
+    private List<BodegaLookupDto> bodegas = new();
+    private List<TipoMovimientoDto> tipos = new();
+
+    private BodegaLookupDto? bodegaSeleccionada;
+    private TipoMovimientoDto? tipoSeleccionado;
+    private DateTime? fechaDesde;
+    private DateTime? fechaHasta;
+    private string filtroBusqueda = string.Empty;
+
+    private MovimientosBodegaResumenDto resumen = new();
+    private int totalFilas;
+
+    private bool isLoading;
+    private string? errorMessage;
+
+    private bool TieneFiltrosSecundarios =>
+        tipoSeleccionado is not null
+        || !string.IsNullOrWhiteSpace(filtroBusqueda)
+        || fechaDesde.HasValue
+        || fechaHasta.HasValue;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Rango por defecto: el mes en curso. El kardex de una bodega puede ser enorme
+        // (histórico SIMAFI incluido); arrancar acotado evita traer todo de golpe. Ajustable.
+        var hoy = DateTime.Today;
+        fechaDesde = new DateTime(hoy.Year, hoy.Month, 1);
+        fechaHasta = hoy;
+
+        dataSource = new MovimientosBodegaGridDataSource(KardexClient, total =>
+        {
+            totalFilas = total;
+            InvokeAsync(StateHasChanged);
+        })
+        {
+            Filtro = BuildFilter()
+        };
+
+        await CargarCatalogosAsync();
+    }
+
+    private MovimientosBodegaFilterDto BuildFilter() => new()
+    {
+        BodegaId = bodegaSeleccionada?.Id,
+        FechaDesde = fechaDesde.HasValue ? DateOnly.FromDateTime(fechaDesde.Value) : null,
+        FechaHasta = fechaHasta.HasValue ? DateOnly.FromDateTime(fechaHasta.Value) : null,
+        TipoTransaccion = tipoSeleccionado?.Codigo,
+        Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda
+    };
+
+    private async Task CargarCatalogosAsync()
+    {
+        try
+        {
+            bodegas = await BodegasClient.GetLookupAsync();
+            tipos = (await KardexClient.GetTiposMovimientoAsync()).ToList();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudieron cargar los catálogos: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Aplica el filtro actual: lo pasa a la fuente remota, repagina el grid en el servidor
+    /// y refresca los KPIs. Sin bodega no consulta (el grid se oculta).
+    /// </summary>
+    private async Task CargarAsync()
+    {
+        dataSource.Filtro = BuildFilter();
+
+        if (bodegaSeleccionada is null)
+        {
+            resumen = new MovimientosBodegaResumenDto();
+            totalFilas = 0;
+            return;
+        }
+
+        grid?.Reload();
+        await CargarResumenAsync();
+    }
+
+    private async Task CargarResumenAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            resumen = await KardexClient.GetResumenBodegaAsync(BuildFilter());
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudieron cargar los totales: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnBodegaChanged(BodegaLookupDto? bodega)
+    {
+        bodegaSeleccionada = bodega;
+        await CargarAsync();
+    }
+
+    private async Task OnFechaDesdeChanged(DateTime? valor)
+    {
+        fechaDesde = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnFechaHastaChanged(DateTime? valor)
+    {
+        fechaHasta = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnTipoChanged(TipoMovimientoDto? tipo)
+    {
+        tipoSeleccionado = tipo;
+        await CargarAsync();
+    }
+
+    private async Task OnBusquedaChanged(string valor)
+    {
+        filtroBusqueda = valor;
+        await CargarAsync();
+    }
+
+    private async Task LimpiarFiltros()
+    {
+        tipoSeleccionado = null;
+        filtroBusqueda = string.Empty;
+        var hoy = DateTime.Today;
+        fechaDesde = new DateTime(hoy.Year, hoy.Month, 1);
+        fechaHasta = hoy;
+        await CargarAsync();
+    }
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private static string TipoCssClass(string? tipo) => tipo switch
+    {
+        "102" => "mov-entrada",
+        "103" => "mov-ajuste",
+        "202" => "mov-salida",
+        _ => "mov-otro"
+    };
+
+    private void MostrarPdf()
+    {
+        if (bodegaSeleccionada is null)
+        {
+            return;
+        }
+
+        pdfPopup?.Mostrar(KardexClient.GetPdfBodegaUrl(BuildFilter()), $"Movimientos — {bodegaSeleccionada.Display}");
+    }
+
+    private async Task ExportExcelAsync()
+    {
+        if (grid is null)
+        {
+            return;
+        }
+
+        // Fuente remota: hay que esperar la carga completa antes de exportar, si no el Excel sale incompleto.
+        await grid.WaitForDataLoadAsync();
+
+        var stamp = DateTime.Now.ToString("yyyyMMdd_HHmm");
+        var bodega = bodegaSeleccionada?.Display?.Replace(" ", "_") ?? "bodega";
+        await grid.ExportToXlsxAsync($"movimientos_{bodega}_{stamp}.xlsx", new GridXlExportOptions());
+    }
+}

@@ -25,6 +25,38 @@
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.2" />
   </ItemGroup>
 
+  <!--
+    El CSS aislado de apc.Client (133 archivos .razor.css, ~350 KB: el menu lateral, el layout y
+    casi todas las paginas) NO llega al navegador por si solo, y por eso el portal salia sin
+    estilos en la barra de navegacion.
+
+    Motivo: apc.Client es una aplicacion Blazor WebAssembly, no una libreria. El SDK genera su
+    bundle como "ApplicationBundle" -propio de esa app, AssetMode=CurrentProject- en vez de como
+    "ProjectBundle", que es el unico que el proyecto que la referencia fusiona dentro de su propio
+    apc.styles.css. El archivo se construye y hasta se copia, pero queda listado solo en
+    apc.Client.staticwebassets.endpoints.json, un manifiesto que el host no carga: MapStaticAssets()
+    usa apc.staticwebassets.endpoints.json. Nadie lo sirve y la peticion responde 404.
+
+    Se copia al wwwroot del host ANTES de que se resuelvan los static web assets, para que sea un
+    archivo mas del sitio y viaje igual en build, en run y en publish. App.razor lo enlaza junto a
+    apc.styles.css.
+
+    Si el bundle no aparece, el build FALLA a proposito: un fallo silencioso aqui se traduce en un
+    portal publicado sin estilos, que es justo lo que se quiere impedir.
+  -->
+  <Target Name="CopiarCssAisladoDelCliente"
+          BeforeTargets="ResolveStaticWebAssetsInputs"
+          DependsOnTargets="ResolveProjectReferences">
+    <PropertyGroup>
+      <_BundleCssCliente>$(MSBuildThisFileDirectory)..\apc.Client\obj\$(Configuration)\net9.0\scopedcss\bundle\apc.Client.styles.css</_BundleCssCliente>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(_BundleCssCliente)')"
+           Text="No se encontro el CSS aislado de apc.Client en $(_BundleCssCliente). Sin el, el portal se publica sin los estilos del menu." />
+    <Copy SourceFiles="$(_BundleCssCliente)"
+          DestinationFiles="$(MSBuildThisFileDirectory)wwwroot\apc.Client.styles.css"
+          SkipUnchangedFiles="true" />
+  </Target>
+
   <ItemGroup>
     <ProjectReference Include="..\apc.Client\apc.Client.csproj" />
     <ProjectReference Include="..\SIAD.Reports\SIAD.Reports.csproj" />

@@ -1,0 +1,1138 @@
+@page "/almacen/ordenes-compra/nueva"
+@page "/almacen/ordenes-compra/{Id:int}/editar"
+@attribute [Authorize(Policy = PermissionNames.Inventario.Create)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.DTOs.Aprobaciones
+@using SIAD.Core.DTOs.Presupuesto
+@using SIAD.Core.DTOs.Proveedores
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+@using apc.Client.Services.Proveedores
+
+@inject OrdenesCompraClient OrdenesClient
+@inject ProveedoresClient ProveedoresClient
+@inject IsvCompraConfigClient IsvComprasClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>SIAD - @(EsEdicion ? "Orden de compra" : "Nueva orden de compra")</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="OrdenCompraFormToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div class="d-flex align-items-center gap-3">
+            <div class="@IconWrapperClass form-icon">
+                <i class="@IconClass"></i>
+            </div>
+            <div>
+                <h2 class="page-title">
+                    @Titulo
+                    @if (EsEdicion)
+                    {
+                        <span class="badge-estado-oc @ClaseEstado(modelo.Estado) ms-2">@modelo.EstadoDescripcion</span>
+                    }
+                </h2>
+                <p class="page-subtitle">@Subtitulo</p>
+            </div>
+        </div>
+        <div class="header-actions d-flex gap-2 flex-wrap">
+            @if (SoloLectura && EsEdicion)
+            {
+                <span class="text-muted small align-self-center me-2">
+                    <i class="bi bi-lock me-1"></i>Sólo lectura: la orden ya no está en borrador
+                </span>
+            }
+            @if (EsEdicion)
+            {
+                <DxButton Text="Imprimir" Click="MostrarComprobante"
+                          IconCssClass="bi bi-printer"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          CssClass="btn-modern" />
+            }
+            <DxButton Text="Volver" Click="Volver"
+                      IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      CssClass="btn-modern" />
+        </div>
+    </div>
+
+    @if (cargando)
+    {
+        <div class="modern-card d-flex justify-content-center py-5">
+            <DxLoadingPanel Visible="true" Text="Cargando orden..." />
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(errorCarga))
+    {
+        <div class="alert alert-danger" role="alert">@errorCarga</div>
+    }
+    else
+    {
+        <!-- ── Datos de la orden ─────────────────────────────────────────────── -->
+        <div class="modern-card mb-3">
+            <h6 class="seccion-titulo"><i class="bi bi-file-earmark-text me-2"></i>Datos de la orden</h6>
+
+            <div class="row g-3">
+                <div class="col-12 col-md-3">
+                    <label class="form-label fw-semibold">No. orden de compra</label>
+                    <div class="valor-solo-lectura">
+                        @(modelo.Numero > 0 ? modelo.Numero.ToString("00000") : "Se asigna al guardar")
+                    </div>
+                </div>
+                <div class="col-12 col-md-3">
+                    <label class="form-label fw-semibold">Fecha</label>
+                    <DxDateEdit Date="@fecha" DateChanged="@((DateTime? d) => fecha = d)"
+                                Enabled="@(!SoloLectura)" CssClass="w-100" />
+                </div>
+                <div class="col-12 col-md-3">
+                    <label class="form-label fw-semibold">Fecha de emisión</label>
+                    <DxDateEdit Date="@fechaEmision" DateChanged="@((DateTime? d) => fechaEmision = d)"
+                                Enabled="@(!SoloLectura)" NullText="Opcional" CssClass="w-100" />
+                </div>
+                <div class="col-12 col-md-3">
+                    <label class="form-label fw-semibold">Términos de pago</label>
+                    <DxTextBox @bind-Text="modelo.TerminosPago" MaxLength="100"
+                               Enabled="@(!SoloLectura)" NullText="Ej. Crédito 30 días" CssClass="w-100" />
+                </div>
+
+                <div class="col-12 col-md-6">
+                    <label class="form-label fw-semibold">Proveedor <span class="text-danger">*</span></label>
+                    <DxComboBox Data="@proveedores" Value="@modelo.CodProveedor"
+                                ValueChanged="@((string? v) => OnProveedorChangedAsync(v))"
+                                ValueExpression="@(() => modelo.CodProveedor)"
+                                ValueFieldName="@nameof(ProveedorComboItem.Codigo)"
+                                TextFieldName="@nameof(ProveedorComboItem.Display)"
+                                FilteringMode="DataGridFilteringMode.Contains"
+                                NullText="Seleccione o busque un proveedor..."
+                                Enabled="@(!SoloLectura)"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                CssClass="w-100" />
+                    <div class="form-text">Define qué artículos se pueden pedir: sólo los que tienen su código de proveedor.</div>
+                </div>
+                <div class="col-12 col-md-3">
+                    <label class="form-label fw-semibold">Entrega pactada <span class="text-danger">*</span></label>
+                    <DxDateEdit Date="@fechaEntregaPactada" DateChanged="@((DateTime? d) => fechaEntregaPactada = d)"
+                                Enabled="@(!SoloLectura)" NullText="Seleccione la fecha" CssClass="w-100" />
+                    <div class="form-text">Fecha comprometida por el proveedor: contra ella se mide su puntualidad.</div>
+                </div>
+                <div class="col-12 col-md-3">
+                    <label class="form-label fw-semibold">Destino / uso</label>
+                    <DxTextBox @bind-Text="modelo.DestinoUso" MaxLength="250"
+                               Enabled="@(!SoloLectura)" NullText="Ej. reposición bodega central" CssClass="w-100" />
+                </div>
+                <div class="col-12">
+                    <DxCheckBox Checked="modelo.CalculaIsv"
+                                CheckedExpression="@(() => modelo.CalculaIsv)"
+                                CheckedChanged="@((bool v) => OnCalculaIsvChanged(v))"
+                                Enabled="@(!SoloLectura)">
+                        Calcula ISV
+                    </DxCheckBox>
+                    @* La empresa capitaliza el ISV al costo: la factura lo va a cobrar y a reservar
+                       presupuesto igual, así que una orden sin ISV pide menos de lo que gastará. *@
+                    @if (!SoloLectura && empresaCapitalizaIsv && !modelo.CalculaIsv)
+                    {
+                        <div class="form-text text-warning-emphasis mt-1">
+                            <i class="bi bi-exclamation-triangle me-1"></i>
+                            Esta empresa suma el ISV al costo de la compra. Sin calcularlo, la orden
+                            reservará menos presupuesto del que la factura va a consumir.
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Renglones ─────────────────────────────────────────────────────── -->
+        <div class="modern-card mb-3">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                <h6 class="seccion-titulo mb-0"><i class="bi bi-list-ul me-2"></i>Renglones del pedido</h6>
+                <div class="text-muted small">
+                    Renglones: <span class="fw-bold">@modelo.Detalles.Count</span> ·
+                    Cant. pedida: <span class="fw-bold">@modelo.Detalles.Sum(d => d.CantidadPedida).ToString("N2")</span>
+                </div>
+            </div>
+
+            @if (!SoloLectura)
+            {
+                @if (string.IsNullOrWhiteSpace(modelo.CodProveedor))
+                {
+                    <div class="alert alert-info py-2 mb-3" role="alert">
+                        <i class="bi bi-info-circle me-1"></i>Elija primero el proveedor para poder agregar artículos.
+                    </div>
+                }
+                else
+                {
+                    <div class="buscador-articulo mb-3">
+                        <DxComboBox Data="@articulosProveedor" @bind-Value="articuloSeleccionado"
+                                    TextFieldName="@nameof(OrdenCompraArticuloLookupDto.Display)"
+                                    FilteringMode="DataGridFilteringMode.Contains"
+                                    NullText="Buscar artículo por código o descripción..."
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    CssClass="flex-grow-1" />
+                        <DxButton Text="Agregar" IconCssClass="bi bi-plus-lg"
+                                  RenderStyle="ButtonRenderStyle.Primary"
+                                  Enabled="@(articuloSeleccionado is not null)"
+                                  Click="AgregarRenglon" />
+                    </div>
+
+                    @if (articulosProveedor.Count == 0)
+                    {
+                        <div class="alert alert-warning py-2 mb-3" role="alert">
+                            <i class="bi bi-exclamation-triangle me-1"></i>
+                            Este proveedor no tiene artículos con código registrado. Regístrelo en el artículo
+                            (pestaña <strong>Proveedores</strong>, campo <strong>Código UPC</strong>) antes de pedirle algo.
+                        </div>
+                    }
+                }
+            }
+
+            @{
+                var renglonesSinIsv = modelo.Detalles.Count(x => !x.IsvConfigurado);
+            }
+            @if (modelo.CalculaIsv && renglonesSinIsv > 0)
+            {
+                <div class="alert alert-warning py-2 mb-3" role="alert">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    <strong>@renglonesSinIsv</strong> renglón(es) van <strong>sin ISV</strong>: su tipo de artículo no tiene tasa configurada.
+                    Asígnala en <strong>Mantenimientos → Tipos de artículo</strong> (campo «ISV en compras») y el ISV se calculará solo.
+                </div>
+            }
+
+            <div class="table-responsive">
+                <table class="table table-sm align-middle tabla-renglones">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Cód. proveedor</th>
+                            <th>Descripción</th>
+                            <th>Centro de costo</th>
+                            <th>Entrega pactada</th>
+                            <th class="text-end">Cant. pedida</th>
+                            <th class="text-end">Costo unitario</th>
+                            <th class="text-end">ISV</th>
+                            <th class="text-end">Total</th>
+                            @if (!SoloLectura)
+                            {
+                                <th></th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (modelo.Detalles.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="@(SoloLectura ? 9 : 10)" class="text-center text-muted py-4">
+                                    La orden aún no tiene renglones.
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var d in modelo.Detalles)
+                            {
+                                <tr @key="d">
+                                    <td class="font-monospace small text-muted">@(string.IsNullOrWhiteSpace(d.CodigoArticulo) ? "—" : d.CodigoArticulo)</td>
+                                    <td><span class="cod-proveedor">@(string.IsNullOrWhiteSpace(d.CodigoUpc) ? "—" : d.CodigoUpc)</span></td>
+                                    <td>@d.Descripcion</td>
+                                    <td>
+                                        @if (SoloLectura)
+                                        {
+                                            <span class="text-muted">@(string.IsNullOrWhiteSpace(d.CentroCosto) ? "—" : d.CentroCosto)</span>
+                                        }
+                                        else
+                                        {
+                                            <DxTextBox @bind-Text="d.CentroCosto" MaxLength="40" NullText="Opcional" CssClass="w-100" />
+                                        }
+                                    </td>
+                                    <td style="min-width:150px">
+                                        @* Opcional: sólo para entregas escalonadas. Vacía = rige la fecha de la orden. *@
+                                        @if (SoloLectura)
+                                        {
+                                            <span class="text-muted">
+                                                @(d.FechaEntregaPactada.HasValue
+                                                    ? d.FechaEntregaPactada.Value.ToString("dd/MM/yyyy")
+                                                    : "Igual que la orden")
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <DxDateEdit Date="@FechaRenglon(d)"
+                                                        DateChanged="@((DateTime? v) => FechaRenglonChanged(d, v))"
+                                                        NullText="Igual que la orden"
+                                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                        CssClass="w-100" />
+                                        }
+                                    </td>
+                                    <td class="text-end" style="min-width:120px">
+                                        @if (SoloLectura)
+                                        {
+                                            <span>@d.CantidadPedida.ToString("N2")</span>
+                                        }
+                                        else
+                                        {
+                                            <DxSpinEdit @bind-Value="d.CantidadPedida" DisplayFormat="N2" MinValue="0" CssClass="w-100" />
+                                        }
+                                    </td>
+                                    <td class="text-end" style="min-width:130px">
+                                        @if (SoloLectura)
+                                        {
+                                            <span>@d.CostoUnitario.ToString("N4")</span>
+                                        }
+                                        else
+                                        {
+                                            <DxSpinEdit @bind-Value="d.CostoUnitario" DisplayFormat="N4" MinValue="0" CssClass="w-100" />
+                                        }
+                                    </td>
+                                    <td class="text-end" style="min-width:120px">
+                                        @if (!modelo.CalculaIsv)
+                                        {
+                                            <span class="text-muted">—</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="fw-semibold">@IsvRenglon(d).ToString("N2")</span>
+                                            @if (!d.IsvConfigurado)
+                                            {
+                                                <i class="bi bi-exclamation-triangle-fill text-warning ms-1"
+                                                   title="@AvisoSinIsv(d.Descripcion, d.TipoArticuloNombre)"></i>
+                                            }
+                                            else if (d.TasaIsv > 0)
+                                            {
+                                                <span class="text-muted small ms-1">@d.TasaIsv.ToString("0.##")%</span>
+                                            }
+                                        }
+                                    </td>
+                                    <td class="text-end fw-semibold">@TotalRenglon(d).ToString("N2")</td>
+                                    @if (!SoloLectura)
+                                    {
+                                        <td class="text-center">
+                                            <button type="button" class="btn-icon btn-delete" title="Quitar renglón"
+                                                    @onclick="() => QuitarRenglon(d)">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ── Observaciones + totales ───────────────────────────────────────── -->
+        <div class="row g-3">
+            <div class="col-12 col-lg-7">
+                <div class="modern-card h-100">
+                    <h6 class="seccion-titulo"><i class="bi bi-chat-left-text me-2"></i>Observaciones</h6>
+                    <DxMemo @bind-Text="modelo.Observaciones" Rows="4" MaxLength="1000"
+                            Enabled="@(!SoloLectura)"
+                            NullText="Notas del pedido, condiciones de entrega, contacto..."
+                            CssClass="w-100" />
+                </div>
+            </div>
+
+            <div class="col-12 col-lg-5">
+                <div class="modern-card h-100">
+                    <h6 class="seccion-titulo"><i class="bi bi-receipt me-2"></i>Totales</h6>
+
+                    <div class="totales-fila">
+                        <span>Sub-total</span>
+                        <span class="valor">@SubTotal.ToString("N2")</span>
+                    </div>
+                    <div class="totales-fila">
+                        <span>Descuento (%)</span>
+                        <span style="width:120px">
+                            @if (SoloLectura)
+                            {
+                                <span class="valor d-block text-end">@modelo.Descuento.ToString("N2")</span>
+                            }
+                            else
+                            {
+                                <DxSpinEdit @bind-Value="modelo.Descuento" DisplayFormat="N2"
+                                            MinValue="0" MaxValue="100" CssClass="w-100" />
+                            }
+                        </span>
+                    </div>
+                    <div class="totales-fila">
+                        <span class="text-muted">Monto del descuento</span>
+                        <span class="valor text-danger">-@MontoDescuento.ToString("N2")</span>
+                    </div>
+                    <div class="totales-fila">
+                        <span>ISV</span>
+                        <span class="valor">@Isv.ToString("N2")</span>
+                    </div>
+                    <div class="totales-fila">
+                        <span>Otros gastos</span>
+                        <span style="width:120px">
+                            @if (SoloLectura)
+                            {
+                                <span class="valor d-block text-end">@modelo.OtrosGastos.ToString("N2")</span>
+                            }
+                            else
+                            {
+                                <DxSpinEdit @bind-Value="modelo.OtrosGastos" DisplayFormat="N2" MinValue="0" CssClass="w-100" />
+                            }
+                        </span>
+                    </div>
+
+                    <div class="totales-total">
+                        <span>Total del pedido</span>
+                        <span>@Total.ToString("N2") <small class="text-muted">HNL</small></span>
+                    </div>
+
+                    @* Disponibilidad presupuestaria ANTES de aprobar: ver el tope después del
+                       rechazo es la peor forma de enterarse. Solo aparece si el control está
+                       encendido para la empresa. *@
+                    @if (presupuesto is not null && presupuesto.Activo && presupuesto.Partidas.Count > 0)
+                    {
+                        <div class="panel-presupuesto mt-3 @(presupuesto.TieneFaltantes ? "panel-presupuesto-falta" : string.Empty)">
+                            <div class="panel-presupuesto-titulo">
+                                <i class="bi @(presupuesto.TieneFaltantes ? "bi-exclamation-triangle-fill" : "bi-wallet2")"></i>
+                                Presupuesto
+                                @if (presupuesto.Modo == 1)
+                                {
+                                    <span class="badge-modo">Solo advertencia</span>
+                                }
+                            </div>
+
+                            <table class="tabla-presupuesto">
+                                <thead>
+                                    <tr>
+                                        <th>Partida</th>
+                                        <th class="text-end">Requiere</th>
+                                        <th class="text-end">Disponible</th>
+                                        <th class="text-end">Quedaría</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var p in presupuesto.Partidas)
+                                    {
+                                        <tr class="@(p.Falta ? "fila-falta" : string.Empty)">
+                                            <td>
+                                                @if (p.SinCuenta)
+                                                {
+                                                    <span class="text-danger">Renglón sin cuenta presupuestaria</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="font-monospace">@p.CuentaCode</span>
+                                                    @if (!string.IsNullOrWhiteSpace(p.CuentaNombre))
+                                                    {
+                                                        <span class="text-muted small ms-2">@p.CuentaNombre</span>
+                                                    }
+                                                    @if (!p.Presupuestable)
+                                                    {
+                                                        <span class="badge-no-controlada">No controlada</span>
+                                                    }
+                                                }
+                                            </td>
+                                            <td class="text-end">@p.Requerido.ToString("N2")</td>
+                                            <td class="text-end">
+                                                @(p.Disponible.HasValue ? p.Disponible.Value.ToString("N2") : "Sin presupuesto")
+                                            </td>
+                                            <td class="text-end fw-semibold">
+                                                @(p.Restante.HasValue ? p.Restante.Value.ToString("N2") : "—")
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+
+                            @if (presupuesto.TieneFaltantes)
+                            {
+                                <div class="panel-presupuesto-aviso">
+                                    @if (presupuesto.Modo == 2)
+                                    {
+                                        <text>No alcanza el presupuesto: la aprobación será rechazada.</text>
+                                    }
+                                    else
+                                    {
+                                        <text>No alcanza el presupuesto, pero el control está en modo advertencia: la orden se aprobará y el sobregiro quedará registrado.</text>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @* Autorización del documento. La aprobación NO es en cascada: una sola firma
+                       de quien tenga límite suficiente resuelve la orden. *@
+                    @if (aprobacionEstado is not null && aprobacionEstado.ControlEncendido
+                         && modelo.Estado != EstadoOrdenCompra.Borrador)
+                    {
+                        <div class="panel-aprobacion mt-3">
+                            <div class="panel-aprobacion-titulo">
+                                <i class="bi bi-shield-check"></i>
+                                Autorización
+                            </div>
+
+                            @if (aprobacionEstado.Firma is not null)
+                            {
+                                <div class="firma-otorgada">
+                                    <div class="firma-marca firma-ok">
+                                        <i class="@IconoFirma(aprobacionEstado.Firma.Estado)"></i>
+                                    </div>
+                                    <div class="firma-detalle">
+                                        <div class="fw-semibold">@aprobacionEstado.Firma.Descripcion</div>
+                                        <div class="text-muted small">
+                                            @aprobacionEstado.Firma.UsuarioFirma
+                                            @if (aprobacionEstado.Firma.FechaFirma.HasValue)
+                                            {
+                                                <text> · @aprobacionEstado.Firma.FechaFirma.Value.ToString("dd/MM/yyyy HH:mm")</text>
+                                            }
+                                        </div>
+                                        <div class="text-muted small">
+                                            Monto autorizado @aprobacionEstado.Firma.TotalDocumento.ToString("N2")
+                                            · límite @DescribirLimite(aprobacionEstado.Firma.LimiteUtilizado)
+                                        </div>
+                                        @if (!string.IsNullOrWhiteSpace(aprobacionEstado.Firma.Comentario))
+                                        {
+                                            <div class="text-muted small fst-italic">@aprobacionEstado.Firma.Comentario</div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                            else if (aprobacionEstado.HayAprobadorCapaz)
+                            {
+                                <div class="text-muted small">
+                                    Esperando autorización de <strong>@aprobacionEstado.TramoMinimo</strong>
+                                    o de cualquier nivel superior. No hace falta que firme nadie antes.
+                                </div>
+                            }
+                            else
+                            {
+                                @* Que nadie alcance el monto es un estado real: hay que verlo aquí. *@
+                                <div class="aviso-sin-aprobador">
+                                    <i class="bi bi-exclamation-triangle"></i>
+                                    <div>
+                                        Ningún nivel configurado autoriza @aprobacionEstado.MontoRequerido.ToString("N2").
+                                        La orden queda esperando: suba el límite de un nivel o asígnele aprobadores
+                                        en Configuración → Aprobaciones.
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (!SoloLectura)
+                    {
+                        <div class="d-flex justify-content-end gap-2 mt-3 flex-wrap">
+                            <DxButton Text="Guardar borrador" IconCssClass="bi bi-save"
+                                      RenderStyle="ButtonRenderStyle.Secondary"
+                                      Enabled="@(!guardando)" Click="GuardarAsync" />
+
+                            @* Con la escalera encendida el borrador se ENVÍA; sin ella se aprueba directo. *@
+                            @if (EsEdicion && modelo.Estado == EstadoOrdenCompra.Borrador && !aprobacionConfig.Encendido)
+                            {
+                                <DxButton Text="Aprobar" IconCssClass="bi bi-check-lg"
+                                          RenderStyle="ButtonRenderStyle.Primary"
+                                          Enabled="@(!guardando)" Click="AprobarAsync" />
+                            }
+                            @if (EsEdicion && modelo.Estado == EstadoOrdenCompra.Borrador && aprobacionConfig.Encendido)
+                            {
+                                <DxButton Text="Enviar a aprobación" IconCssClass="bi bi-send"
+                                          RenderStyle="ButtonRenderStyle.Primary"
+                                          Enabled="@(!guardando)" Click="EnviarAAprobacionAsync" />
+                            }
+                        </div>
+                    }
+
+                    @* En aprobación la orden no es editable, pero sí firmable por quien corresponda. *@
+                    @if (EsEdicion && modelo.Estado == EstadoOrdenCompra.EnAprobacion
+                         && aprobacionEstado?.PuedoAutorizar == true)
+                    {
+                        <div class="d-flex justify-content-end gap-2 mt-3 flex-wrap">
+                            <DxButton Text="Autorizar" IconCssClass="bi bi-shield-check"
+                                      RenderStyle="ButtonRenderStyle.Primary"
+                                      Enabled="@(!guardando)" Click="FirmarAsync" />
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<PdfPreviewPopup @ref="pdfPopup" />
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    /// <summary>Item del combo de proveedores: código + "código — nombre" (para buscar por ambos).</summary>
+    private sealed class ProveedorComboItem
+    {
+        public string Codigo { get; set; } = string.Empty;
+        public string Nombre { get; set; } = string.Empty;
+        public string Display => $"{Codigo} — {Nombre}";
+    }
+
+    private bool EsEdicion => Id.HasValue;
+
+    /// <summary>Sólo se edita en Borrador; aprobada/recibida/cerrada/anulada se ve pero no se toca.</summary>
+    private bool SoloLectura => EsEdicion && modelo.Estado != EstadoOrdenCompra.Borrador;
+
+    private OrdenCompraDto modelo = new();
+    private PdfPreviewPopup? pdfPopup;
+    private List<ProveedorComboItem> proveedores = new();
+    private List<OrdenCompraArticuloLookupDto> articulosProveedor = new();
+    private OrdenCompraArticuloLookupDto? articuloSeleccionado;
+
+    private DateTime? fecha = DateTime.Today;
+    private DateTime? fechaEmision;
+
+    /// <summary>Fecha comprometida por el proveedor. Obligatoria desde el borrador.</summary>
+    private DateTime? fechaEntregaPactada;
+
+    // DxDateEdit trabaja con DateTime?; el DTO viaja en DateOnly?. Estos dos puentes evitan
+    // repetir la conversión en cada renglón.
+    private static DateTime? FechaRenglon(OrdenCompraDetalleDto d)
+        => d.FechaEntregaPactada?.ToDateTime(TimeOnly.MinValue);
+
+    private static void FechaRenglonChanged(OrdenCompraDetalleDto d, DateTime? v)
+        => d.FechaEntregaPactada = v.HasValue ? DateOnly.FromDateTime(v.Value) : null;
+
+    private bool cargando = true;
+
+    /// <summary>
+    /// ¿La empresa suma el ISV al costo de la compra (<c>cfg_compra_isv</c> = COSTO)? Decide con
+    /// qué valor nace «Calcula ISV» y si desmarcarlo merece un aviso de presupuesto.
+    /// </summary>
+    private bool empresaCapitalizaIsv = true;
+    private bool guardando;
+    private string? errorCarga;
+
+    private string Titulo => EsEdicion ? "Orden de compra" : "Nueva orden de compra";
+    private string Subtitulo => EsEdicion
+        ? "Pedido al proveedor: se aprueba y luego se recibe"
+        : "Complete la orden y guárdela como borrador";
+    private string IconClass => EsEdicion ? "bi bi-file-earmark-text" : "bi bi-cart-plus";
+    private string IconWrapperClass => EsEdicion
+        ? "bg-warning bg-opacity-10 text-warning rounded-circle d-flex align-items-center justify-content-center"
+        : "bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center";
+
+    // ── Totales (espejo del cálculo del servidor, que es el autoritativo) ────
+    private decimal SubTotal => modelo.Detalles.Sum(TotalRenglon);
+    private decimal MontoDescuento => Math.Round(SubTotal * modelo.Descuento / 100m, 2, MidpointRounding.AwayFromZero);
+    private decimal Isv => Math.Round(modelo.Detalles.Sum(IsvRenglon), 2, MidpointRounding.AwayFromZero);
+    private decimal Total => SubTotal - MontoDescuento + Isv + modelo.OtrosGastos;
+
+    private static decimal TotalRenglon(OrdenCompraDetalleDto d)
+        => Math.Round(d.CantidadPedida * d.CostoUnitario, 2, MidpointRounding.AwayFromZero);
+
+    /// <summary>
+    /// ISV del renglón. Editando se calcula desde la tasa del tipo (el servidor hace lo mismo y
+    /// es el autoritativo); en solo lectura se respeta el ISV que quedó guardado.
+    /// <para>
+    /// El descuento de cabecera rebaja la base imponible del renglón, así que el ISV va sobre
+    /// el renglón ya descontado —mismo cálculo que <c>OrdenCompraService</c>—. Si esta fórmula
+    /// se desviara de la del servidor, el importe saltaría al guardar.
+    /// </para>
+    /// </summary>
+    private decimal IsvRenglon(OrdenCompraDetalleDto d)
+    {
+        if (!modelo.CalculaIsv) return 0m;
+        if (SoloLectura) return d.Impuesto;
+
+        // El campo de descuento está acotado a 0..100, de modo que el factor va de 1 a 0.
+        var factorNeto = (100m - modelo.Descuento) / 100m;
+        var baseNeta = Math.Round(TotalRenglon(d) * factorNeto, 2, MidpointRounding.AwayFromZero);
+        return Math.Round(baseNeta * d.TasaIsv / 100m, 2, MidpointRounding.AwayFromZero);
+    }
+
+    /// <summary>Texto del aviso "sin ISV configurado", para el toast al agregar y el tooltip del renglón.</summary>
+    private static string AvisoSinIsv(string? descripcion, string? tipoNombre)
+    {
+        var art = string.IsNullOrWhiteSpace(descripcion) ? "El artículo" : $"«{descripcion}»";
+        return string.IsNullOrWhiteSpace(tipoNombre)
+            ? $"{art} no tiene tipo asignado, así que irá SIN ISV. Asígnale un tipo con tasa en Mantenimientos → Tipos de artículo."
+            : $"El tipo «{tipoNombre}» no tiene ISV configurado, así que {art} irá SIN ISV. Configúralo en Mantenimientos → Tipos de artículo (campo «ISV en compras»).";
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarProveedoresAsync();
+
+        // Decide si el borrador se aprueba de un clic o se envía a la escalera.
+        aprobacionConfig = await OrdenesClient.ObtenerAprobacionConfigAsync();
+
+        await CargarPoliticaIsvAsync();
+
+        if (EsEdicion)
+        {
+            await CargarOrdenAsync(Id!.Value);
+            await RefrescarPresupuestoAsync();
+            await RefrescarAprobacionAsync();
+        }
+        else
+        {
+            // La orden nace calculando ISV si la empresa lo capitaliza al costo: es lo que la
+            // factura hará después, y así el presupuesto que se compromete coincide con el que
+            // se devenga. Si el ISV va aparte (crédito fiscal), no infla el costo de la compra.
+            modelo = new OrdenCompraDto
+            {
+                Fecha = DateOnly.FromDateTime(DateTime.Today),
+                CalculaIsv = empresaCapitalizaIsv
+            };
+        }
+
+        cargando = false;
+    }
+
+    /// <summary>
+    /// Política de ISV en compras de la empresa (<c>cfg_compra_isv</c>): COSTO capitaliza el
+    /// impuesto, FISCAL lo lleva aparte. Es la misma cascada que resuelve la factura al recibir.
+    /// <para>
+    /// Si la consulta falla —por ejemplo, un comprador sin permiso de Inventario— se conserva el
+    /// valor de fábrica (capitaliza) en vez de dejar la pantalla rota: es el tratamiento por
+    /// defecto del propio servidor.
+    /// </para>
+    /// </summary>
+    private async Task CargarPoliticaIsvAsync()
+    {
+        try
+        {
+            var cfg = await IsvComprasClient.ObtenerAsync();
+            empresaCapitalizaIsv = string.Equals(
+                cfg.Tratamiento?.Trim(), "COSTO", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            empresaCapitalizaIsv = true;
+        }
+    }
+
+    /// <summary>
+    /// Desmarcar el ISV en una empresa que lo capitaliza deja la orden pidiendo menos presupuesto
+    /// del que la factura consumirá. Se permite —hay compras exentas— pero se avisa.
+    /// </summary>
+    private void OnCalculaIsvChanged(bool valor)
+    {
+        modelo.CalculaIsv = valor;
+
+        if (!valor && empresaCapitalizaIsv)
+        {
+            Toast("Ojo con el presupuesto",
+                  "Esta empresa suma el ISV al costo. Sin calcularlo, la orden reservará menos de lo que la factura va a consumir.",
+                  ToastRenderStyle.Warning);
+        }
+    }
+
+    private async Task CargarProveedoresAsync()
+    {
+        try
+        {
+            var lista = await ProveedoresClient.BuscarAsync(new ProveedorFilterDto { SoloActivos = true });
+            proveedores = lista
+                .Select(p => new ProveedorComboItem { Codigo = p.Codigo, Nombre = p.Nombre })
+                .OrderBy(p => p.Codigo)
+                .ToList();
+        }
+        catch
+        {
+            proveedores = new List<ProveedorComboItem>();
+        }
+    }
+
+    private async Task CargarOrdenAsync(int id)
+    {
+        try
+        {
+            var orden = await OrdenesClient.GetByIdAsync(id);
+            if (orden is null)
+            {
+                errorCarga = "No se encontró la orden de compra.";
+                return;
+            }
+
+            modelo = orden;
+            fecha = orden.Fecha?.ToDateTime(TimeOnly.MinValue);
+            fechaEmision = orden.FechaEmision?.ToDateTime(TimeOnly.MinValue);
+            // Vacía en las órdenes anteriores al 2026-08-14: al editarlas habrá que llenarla.
+            fechaEntregaPactada = orden.FechaEntregaPactada?.ToDateTime(TimeOnly.MinValue);
+
+            if (!SoloLectura && !string.IsNullOrWhiteSpace(modelo.CodProveedor))
+            {
+                await CargarArticulosProveedorAsync(modelo.CodProveedor);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorCarga = $"Error al cargar la orden: {ex.Message}";
+        }
+    }
+
+    private async Task OnProveedorChangedAsync(string? codigo)
+    {
+        var anterior = modelo.CodProveedor;
+        modelo.CodProveedor = codigo ?? string.Empty;
+
+        // Los renglones son específicos del proveedor (llevan SU código de artículo):
+        // si cambia el proveedor, dejan de ser válidos.
+        if (!string.Equals(anterior, modelo.CodProveedor, StringComparison.Ordinal) && modelo.Detalles.Count > 0)
+        {
+            modelo.Detalles.Clear();
+            Toast("Aviso", "Se limpiaron los renglones: pertenecían al proveedor anterior.", ToastRenderStyle.Warning);
+        }
+
+        articuloSeleccionado = null;
+        articulosProveedor = new List<OrdenCompraArticuloLookupDto>();
+
+        if (!string.IsNullOrWhiteSpace(modelo.CodProveedor))
+        {
+            await CargarArticulosProveedorAsync(modelo.CodProveedor);
+        }
+    }
+
+    private async Task CargarArticulosProveedorAsync(string codProveedor)
+    {
+        try
+        {
+            articulosProveedor = await OrdenesClient.BuscarArticulosProveedorAsync(codProveedor);
+        }
+        catch (Exception ex)
+        {
+            articulosProveedor = new List<OrdenCompraArticuloLookupDto>();
+            Toast("Error", $"No se pudieron cargar los artículos del proveedor: {ex.Message}", ToastRenderStyle.Danger);
+        }
+    }
+
+    private void AgregarRenglon()
+    {
+        if (articuloSeleccionado is null) return;
+
+        if (modelo.Detalles.Any(d => d.ArticuloId == articuloSeleccionado.ArticuloId))
+        {
+            Toast("Validación", "Ese artículo ya está en la orden.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        modelo.Detalles.Add(new OrdenCompraDetalleDto
+        {
+            ArticuloId = articuloSeleccionado.ArticuloId,
+            CodigoArticulo = articuloSeleccionado.CodigoArticulo,
+            CodigoUpc = articuloSeleccionado.CodigoUpc,
+            Descripcion = articuloSeleccionado.Descripcion,
+            CantidadPedida = 1m,
+            CostoUnitario = articuloSeleccionado.Costo,
+            TasaIsv = articuloSeleccionado.TasaIsv,
+            IsvConfigurado = articuloSeleccionado.TieneIsvConfigurado,
+            TipoArticuloNombre = articuloSeleccionado.TipoArticuloNombre
+        });
+
+        // Aviso inmediato: si el tipo del artículo no tiene ISV configurado, el renglón irá sin
+        // impuesto — y no es un olvido de captura, porque el ISV ya no se teclea a mano.
+        if (modelo.CalculaIsv && !articuloSeleccionado.TieneIsvConfigurado)
+        {
+            Toast("ISV no configurado",
+                AvisoSinIsv(articuloSeleccionado.Descripcion, articuloSeleccionado.TipoArticuloNombre),
+                ToastRenderStyle.Warning);
+        }
+
+        articuloSeleccionado = null;
+    }
+
+    private void QuitarRenglon(OrdenCompraDetalleDto d) => modelo.Detalles.Remove(d);
+
+    private async Task GuardarAsync()
+    {
+        if (string.IsNullOrWhiteSpace(modelo.CodProveedor))
+        {
+            Toast("Validación", "Seleccione un proveedor.", ToastRenderStyle.Warning);
+            return;
+        }
+        if (modelo.Detalles.Count == 0)
+        {
+            Toast("Validación", "Agregue al menos un renglón.", ToastRenderStyle.Warning);
+            return;
+        }
+        if (!ValidarEntregaPactada())
+        {
+            return;
+        }
+
+        guardando = true;
+        try
+        {
+            VolcarFechas();
+
+            var guardada = EsEdicion
+                ? await OrdenesClient.ActualizarAsync(Id!.Value, modelo)
+                : await OrdenesClient.CrearAsync(modelo);
+
+            Toast("Éxito", $"Orden {guardada.Numero:00000} guardada.", ToastRenderStyle.Success);
+
+            // El modelo se reemplaza SIEMPRE por el del servidor (trae número, id, estado y
+            // totales recalculados). Es indispensable hacerlo ANTES de navegar: al pasar de
+            // /nueva a /{id}/editar Blazor REUSA esta misma instancia del componente, así que
+            // OnInitializedAsync no vuelve a correr y la pantalla se quedaría con el modelo
+            // viejo (mostrando "Se asigna al guardar" en vez del número recién asignado).
+            var eraNueva = !EsEdicion;
+            modelo = guardada;
+
+            // El panel mira los renglones PERSISTIDOS, así que se refresca después de guardar.
+            await RefrescarPresupuestoAsync();
+
+            if (eraNueva)
+            {
+                // Ya tiene número e id: se pasa al modo edición para poder aprobarla.
+                Navigation.NavigateTo($"/almacen/ordenes-compra/{guardada.Id}/editar");
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    /// <summary>
+    /// La entrega pactada es obligatoria (el servidor también la exige; esto sólo evita el
+    /// viaje) y no puede quedar antes de la fecha de la orden, ni en la cabecera ni en un renglón.
+    /// </summary>
+    private bool ValidarEntregaPactada()
+    {
+        if (!fechaEntregaPactada.HasValue)
+        {
+            Toast("Validación", "Indique la fecha de entrega pactada con el proveedor.", ToastRenderStyle.Warning);
+            return false;
+        }
+        if (fecha.HasValue && fechaEntregaPactada.Value.Date < fecha.Value.Date)
+        {
+            Toast("Validación", "La fecha de entrega pactada no puede ser anterior a la fecha de la orden.", ToastRenderStyle.Warning);
+            return false;
+        }
+        if (fecha.HasValue)
+        {
+            var fueraDeRango = modelo.Detalles.Any(d =>
+                d.FechaEntregaPactada.HasValue &&
+                d.FechaEntregaPactada.Value < DateOnly.FromDateTime(fecha.Value));
+            if (fueraDeRango)
+            {
+                Toast("Validación", "Hay un renglón con fecha de entrega anterior a la fecha de la orden.", ToastRenderStyle.Warning);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// <summary>Pasa las tres fechas de la pantalla (DateTime?) al modelo (DateOnly?).</summary>
+    private void VolcarFechas()
+    {
+        modelo.Fecha = fecha.HasValue ? DateOnly.FromDateTime(fecha.Value) : null;
+        modelo.FechaEmision = fechaEmision.HasValue ? DateOnly.FromDateTime(fechaEmision.Value) : null;
+        modelo.FechaEntregaPactada = fechaEntregaPactada.HasValue
+            ? DateOnly.FromDateTime(fechaEntregaPactada.Value)
+            : null;
+    }
+
+    /// <summary>
+    /// Disponibilidad presupuestaria de la orden. Null mientras no se consulta; con Modo = 0 (control
+    /// apagado) el panel no se dibuja.
+    /// </summary>
+    private PresupuestoPrevioDto? presupuesto;
+
+    /// <summary>Autorización de la orden. Null si aún no se consultó.</summary>
+    private AprobacionEstadoDto? aprobacionEstado;
+
+    /// <summary>Si la empresa exige escalera y si este usuario tiene el permiso de firmar.</summary>
+    private OrdenesCompraClient.AprobacionConfigVista aprobacionConfig = new();
+
+    private static string DescribirLimite(decimal? limite)
+        => limite.HasValue ? limite.Value.ToString("N2") : "sin tope";
+
+    /// <summary>
+    /// Trae la escalera de la orden guardada. Nunca lanza: como el panel de presupuesto, es
+    /// información de apoyo y su falla no debe impedir trabajar con la orden.
+    /// </summary>
+    private async Task RefrescarAprobacionAsync()
+    {
+        if (!EsEdicion)
+        {
+            aprobacionEstado = null;
+            return;
+        }
+
+        try
+        {
+            aprobacionEstado = await OrdenesClient.ObtenerAprobacionesAsync(Id!.Value);
+        }
+        catch
+        {
+            aprobacionEstado = null;
+        }
+    }
+
+    private static string IconoFirma(short estado) => estado switch
+    {
+        EstadoAprobacionNivel.Aprobado  => "bi bi-check-circle-fill",
+        EstadoAprobacionNivel.Rechazado => "bi bi-x-circle-fill",
+        EstadoAprobacionNivel.Pendiente => "bi bi-hourglass-split",
+        _ => "bi bi-lock"
+    };
+
+    /// <summary>
+    /// Refresca el panel. Solo tiene sentido sobre una orden ya guardada y en Borrador: el previo se
+    /// calcula en la base a partir de los renglones persistidos, no de los que estan en pantalla sin
+    /// guardar. Nunca lanza: el panel es una ayuda, no un requisito para operar.
+    /// </summary>
+    private async Task RefrescarPresupuestoAsync()
+    {
+        if (!EsEdicion || modelo.Estado != EstadoOrdenCompra.Borrador)
+        {
+            presupuesto = null;
+            return;
+        }
+
+        try
+        {
+            presupuesto = await OrdenesClient.ObtenerPresupuestoAsync(Id!.Value);
+        }
+        catch
+        {
+            presupuesto = null;
+        }
+    }
+
+    private async Task AprobarAsync()
+    {
+        if (!ValidarEntregaPactada())
+        {
+            return;
+        }
+
+        guardando = true;
+        try
+        {
+            // Se guarda primero para que se apruebe exactamente lo que está en pantalla.
+            VolcarFechas();
+            modelo = await OrdenesClient.ActualizarAsync(Id!.Value, modelo);
+
+            // El panel se refresca con lo recien guardado: si el rechazo llega, el usuario ve en
+            // pantalla exactamente contra que cifras se decidio.
+            await RefrescarPresupuestoAsync();
+
+            if (await OrdenesClient.AprobarAsync(Id!.Value))
+            {
+                Toast("Éxito", "Orden aprobada.", ToastRenderStyle.Success);
+                Navigation.NavigateTo("/almacen/ordenes-compra");
+            }
+            else
+            {
+                Toast("Error", "La orden ya no existe.", ToastRenderStyle.Danger);
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    /// <summary>
+    /// Envía el borrador a la escalera. Guarda primero, por la misma razón que aprobar: lo que
+    /// entra a firmarse tiene que ser exactamente lo que está en pantalla.
+    /// </summary>
+    private async Task EnviarAAprobacionAsync()
+    {
+        if (!ValidarEntregaPactada())
+        {
+            return;
+        }
+
+        guardando = true;
+        try
+        {
+            VolcarFechas();
+            modelo = await OrdenesClient.ActualizarAsync(Id!.Value, modelo);
+
+            if (await OrdenesClient.EnviarAAprobacionAsync(Id!.Value))
+            {
+                Toast("Enviada", "La orden espera la autorización de quien alcance su monto.", ToastRenderStyle.Success);
+                Navigation.NavigateTo("/almacen/ordenes-compra");
+            }
+            else
+            {
+                Toast("Error", "La orden ya no existe.", ToastRenderStyle.Danger);
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    /// <summary>Firma el nivel pendiente y se queda en la orden, para ver la línea de tiempo al día.</summary>
+    private async Task FirmarAsync()
+    {
+        guardando = true;
+        try
+        {
+            var resultado = await OrdenesClient.FirmarAsync(Id!.Value);
+
+            if (resultado is null)
+            {
+                Toast("Error", "La orden ya no existe.", ToastRenderStyle.Danger);
+            }
+            else
+            {
+                Toast("Aprobada",
+                    $"Orden aprobada con el nivel «{resultado.DescripcionNivel}» " +
+                    $"(límite {DescribirLimite(resultado.LimiteUtilizado)}). Se reservó el presupuesto.",
+                    ToastRenderStyle.Success);
+
+                // La orden cambió de estado y la escalera avanzó: se recarga todo.
+                var recargada = await OrdenesClient.GetByIdAsync(Id!.Value);
+                if (recargada is not null) modelo = recargada;
+                await RefrescarAprobacionAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    private void Volver() => Navigation.NavigateTo("/almacen/ordenes-compra");
+
+    private void MostrarComprobante()
+        => pdfPopup?.Mostrar(OrdenesCompraClient.GetComprobantePdfUrl(modelo.Id),
+            $"Orden de compra {modelo.Numero:00000}");
+
+    private static string ClaseEstado(short estado) => estado switch
+    {
+        EstadoOrdenCompra.Borrador        => "estado-borrador",
+        EstadoOrdenCompra.Aprobada        => "estado-aprobada",
+        EstadoOrdenCompra.RecibidaParcial => "estado-parcial",
+        EstadoOrdenCompra.Cerrada         => "estado-cerrada",
+        EstadoOrdenCompra.Anulada         => "estado-anulada",
+        _ => "estado-borrador"
+    };
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = text,
+            RenderStyle = style,
+            ProviderName = "OrdenCompraFormToast"
+        });
+}

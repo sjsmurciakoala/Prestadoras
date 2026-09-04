@@ -3,8 +3,8 @@ using SIAD.Core.Tenancy;
 namespace SIAD.Core.Entities;
 
 /// <summary>
-/// Configuraci髇 unificada del sistema contable por empresa
-/// Consolidaci髇 de configuraci髇 principal y cuentas de utilidad
+/// Configuraci贸n unificada del sistema contable por empresa
+/// Consolidaci贸n de configuraci贸n principal y cuentas de utilidad
 /// </summary>
 public class con_configuracion_sistema : ICompanyScopedEntity
 {
@@ -12,7 +12,7 @@ public class con_configuracion_sistema : ICompanyScopedEntity
 
     public long company_id { get; set; }
 
-    // ===== CONFIGURACI覰 PRINCIPAL =====
+    // ===== CONFIGURACI脫N PRINCIPAL =====
     public DateTime? fecha_inicio_ejercicio { get; set; }
 
     public DateTime? fecha_fin_ejercicio { get; set; }
@@ -33,7 +33,7 @@ public class con_configuracion_sistema : ICompanyScopedEntity
 
     public DateTime? ultima_depreciacion { get; set; }
 
-    // ===== CUENTAS DE UTILIDAD - HIST覴ICAS (como c骴igos, no IDs) =====
+    // ===== CUENTAS DE UTILIDAD - HIST脫RICAS (como c贸digos, no IDs) =====
     public string? codigo_cuenta_util_acumulada_historica { get; set; }
 
     public string? codigo_cuenta_util_ejercicio_historica { get; set; }
@@ -42,7 +42,7 @@ public class con_configuracion_sistema : ICompanyScopedEntity
 
     public string? codigo_cuenta_perdida_ejercicio_historica { get; set; }
 
-    // ===== CUENTAS DE UTILIDAD - INFLACI覰 (como c骴igos, no IDs) =====
+    // ===== CUENTAS DE UTILIDAD - INFLACI脫N (como c贸digos, no IDs) =====
     public string? codigo_cuenta_util_acumulada_inflacion { get; set; }
 
     public string? codigo_cuenta_util_ejercicio_inflacion { get; set; }
@@ -51,12 +51,12 @@ public class con_configuracion_sistema : ICompanyScopedEntity
 
     public string? codigo_cuenta_perdida_ejercicio_inflacion { get; set; }
 
-    // ===== OPCIONES DE PRESENTACI覰 =====
+    // ===== OPCIONES DE PRESENTACI脫N =====
     public bool mostrar_orden { get; set; }
 
     public bool mostrar_percontra { get; set; }
 
-    // ===== T蚑ULOS Y DESCRIPCIONES =====
+    // ===== T脥TULOS Y DESCRIPCIONES =====
     public string titulo_estado_resultados { get; set; } = "Estado de Resultados";
 
     public string titulo_balance_general { get; set; } = "Balance General";
@@ -71,7 +71,7 @@ public class con_configuracion_sistema : ICompanyScopedEntity
 
     public string descripcion_orden { get; set; } = "CUENTAS ORDEN";
 
-    // ===== AUDITOR虯 =====
+    // ===== AUDITOR脥A =====
     public DateTime created_at { get; set; } = DateTime.UtcNow;
 
     public string created_by { get; set; } = null!;

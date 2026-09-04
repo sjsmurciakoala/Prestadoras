@@ -26,7 +26,9 @@ internal static class IntegracionContableConfigSql
         bool ActivoBancos,
         bool ActivoNotas,
         bool ActivoMiscelaneos,
-        bool ActivoProveedores);
+        bool ActivoProveedores,
+        bool ActivoAlmacen,
+        bool ActivoCompras);
 
     internal sealed record ComprobanteLinea(long AccountId, decimal Debe, decimal Haber, string? Descripcion);
 
@@ -48,7 +50,9 @@ internal static class IntegracionContableConfigSql
                    activo_bancos AS ActivoBancos,
                    activo_notas AS ActivoNotas,
                    activo_miscelaneos AS ActivoMiscelaneos,
-                   activo_proveedores AS ActivoProveedores
+                   activo_proveedores AS ActivoProveedores,
+                   activo_almacen AS ActivoAlmacen,
+                   activo_compras AS ActivoCompras
             FROM public.con_integracion_config
             WHERE company_id = @CompanyId;
         ";

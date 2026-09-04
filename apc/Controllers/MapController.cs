@@ -3,12 +3,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using SIAD.Core.DTOs.Maps;
+using SIAD.Core.Constants;
+using apc.Security;
 
 namespace apc.Controllers;
 
 [ApiController]
 [Route("api/map")]
-[Authorize]
+[ModuleAuthorize(PermissionModules.Ventas)]
 public sealed class MapController : ControllerBase
 {
     private readonly IOptions<MapsOptions> _mapsOptions;

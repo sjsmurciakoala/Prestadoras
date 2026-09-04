@@ -1,5 +1,5 @@
 @page "/tarifario/desglose-abonos"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Configuracion.View)]
 
 @using DevExpress.Blazor
 @using Microsoft.AspNetCore.Authorization
@@ -14,7 +14,7 @@
 <PageTitle>SIAD - Distribución de abonos</PageTitle>
 
 <div class="page-container">
-    <DxToastProvider Name="DesgloseAbonosToast" MaxToastCount="4" />
+    <DxToastProvider Name="DesgloseAbonosToast" MaxToastCount="4" StickToViewport="true" />
 
     <div class="header-section">
         <div>

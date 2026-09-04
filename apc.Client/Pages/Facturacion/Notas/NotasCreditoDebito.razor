@@ -1,5 +1,5 @@
 ﻿@page "/facturacion/notas"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Ventas.NotasCreditoDebito.View)]
 
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Common
@@ -13,7 +13,7 @@
 
 <PageTitle>SIAD - Notas de Crédito y Débito</PageTitle>
 
-<DxToastProvider Name="NotasToast" MaxToastCount="4" />
+<DxToastProvider Name="NotasToast" MaxToastCount="4" StickToViewport="true" />
 
 <div class="notas-page">
 

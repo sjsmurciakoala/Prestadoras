@@ -1,0 +1,1140 @@
+<title>Scorecard de Proveedores</title>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body, h1, h2, h3, h4, p, figure, table, ul, ol, li { margin: 0; padding: 0; }
+  ul, ol { list-style: none; }
+  button { font: inherit; color: inherit; }
+  table { border-collapse: collapse; }
+
+  :root {
+    --ground:      #f3f5f6;
+    --surface:     #ffffff;
+    --surface-2:   #eceff1;
+    --line:        #d8dee1;
+    --line-soft:   #e7ebed;
+    --ink:         #16222b;
+    --ink-2:       #4a5a64;
+    --ink-3:       #74858e;
+    --accent:      #0f6e64;
+    --accent-soft: #e2efec;
+    --ok:          #1e7a4d;
+    --ok-soft:     #e3f2e8;
+    --warn:        #b0761a;
+    --warn-soft:   #fbf0dc;
+    --bad:         #ae3a31;
+    --bad-soft:    #fbe6e3;
+    --grid:        #cfd7da;
+    --shadow:      0 1px 2px rgba(22,34,43,.06), 0 8px 24px -16px rgba(22,34,43,.35);
+
+    --serif: "Palatino Linotype", Palatino, "Iowan Old Style", Georgia, ui-serif, serif;
+    --sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0e161b;
+      --surface:     #16222b;
+      --surface-2:   #1d2c36;
+      --line:        #2c3d48;
+      --line-soft:   #24343e;
+      --ink:         #e4ecef;
+      --ink-2:       #a9bcc5;
+      --ink-3:       #7d939d;
+      --accent:      #45b3a4;
+      --accent-soft: #123832;
+      --ok:          #5cbc86;
+      --ok-soft:     #12301f;
+      --warn:        #d9a441;
+      --warn-soft:   #33260e;
+      --bad:         #e0736a;
+      --bad-soft:    #371a17;
+      --grid:        #33454f;
+      --shadow:      0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:      #0e161b;
+    --surface:     #16222b;
+    --surface-2:   #1d2c36;
+    --line:        #2c3d48;
+    --line-soft:   #24343e;
+    --ink:         #e4ecef;
+    --ink-2:       #a9bcc5;
+    --ink-3:       #7d939d;
+    --accent:      #45b3a4;
+    --accent-soft: #123832;
+    --ok:          #5cbc86;
+    --ok-soft:     #12301f;
+    --warn:        #d9a441;
+    --warn-soft:   #33260e;
+    --bad:         #e0736a;
+    --bad-soft:    #371a17;
+    --grid:        #33454f;
+    --shadow:      0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .wrap { max-width: 1180px; margin-inline: auto; padding: 0 20px 64px; }
+
+  /* ---------- barra de contexto ---------- */
+  .topbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 20;
+  }
+  .topbar-inner {
+    max-width: 1180px; margin-inline: auto; padding: 12px 20px;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .mark {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 600; letter-spacing: .01em;
+  }
+  .mark-badge {
+    width: 30px; height: 30px; border-radius: 7px;
+    background: var(--accent); color: #fff;
+    display: grid; place-items: center;
+    font-family: var(--mono); font-size: 13px; font-weight: 700;
+  }
+  .mark small {
+    display: block; font-weight: 400; font-size: 11px;
+    color: var(--ink-3); letter-spacing: .06em; text-transform: uppercase;
+  }
+  .ctx { margin-left: auto; display: flex; gap: 18px; flex-wrap: wrap; }
+  .ctx div { font-size: 12px; color: var(--ink-3); }
+  .ctx strong { display: block; font-size: 13px; color: var(--ink); font-weight: 600; }
+
+  /* ---------- pestañas ---------- */
+  .tabs {
+    display: flex; gap: 2px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--line);
+    margin: 22px 0 26px;
+  }
+  .tab {
+    background: none; border: 0; cursor: pointer;
+    padding: 10px 16px; margin-bottom: -1px;
+    color: var(--ink-2); font-size: 13.5px; font-weight: 500;
+    border-bottom: 2px solid transparent;
+    border-radius: 4px 4px 0 0;
+    transition: color .15s, background .15s, border-color .15s;
+  }
+  .tab:hover { color: var(--ink); background: var(--surface-2); }
+  .tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .panel[hidden] { display: none; }
+
+  /* ---------- tipografía ---------- */
+  .page-title {
+    font-family: var(--serif); font-weight: 600;
+    font-size: 27px; line-height: 1.2; letter-spacing: -.01em;
+    text-wrap: balance;
+  }
+  .page-sub { color: var(--ink-2); font-size: 14px; max-width: 68ch; margin-top: 6px; }
+  .eyebrow {
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--ink-3); font-weight: 600;
+  }
+  h3.sec { font-family: var(--serif); font-size: 17px; font-weight: 600; }
+
+  /* ---------- tarjetas ---------- */
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 10px; box-shadow: var(--shadow);
+  }
+  .card-head {
+    padding: 14px 18px; border-bottom: 1px solid var(--line-soft);
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .card-head p { color: var(--ink-3); font-size: 12.5px; }
+  .card-body { padding: 18px; }
+
+  .stack { display: flex; flex-direction: column; gap: 22px; }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; }
+
+  /* ---------- filtros ---------- */
+  .filters { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; padding: 14px 18px; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+  .control {
+    background: var(--surface); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 7px;
+    padding: 7px 11px; font-size: 13.5px; min-width: 172px;
+  }
+  .control:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .btn {
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+    border-radius: 7px; padding: 8px 14px; font-size: 13.5px; font-weight: 500;
+    cursor: pointer; transition: background .15s, border-color .15s;
+  }
+  .btn:hover { background: var(--surface-2); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn-row { margin-left: auto; display: flex; gap: 8px; }
+
+  /* ---------- KPI ---------- */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+  .kpi { padding: 16px 18px; }
+  .kpi .label { font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+  .kpi .value {
+    font-family: var(--mono); font-variant-numeric: tabular-nums;
+    font-size: 30px; font-weight: 600; letter-spacing: -.02em; margin-top: 6px;
+  }
+  .kpi .foot { font-size: 12.5px; color: var(--ink-2); margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+  .delta { font-family: var(--mono); font-size: 12px; padding: 1px 6px; border-radius: 20px; }
+  .delta.up { background: var(--ok-soft); color: var(--ok); }
+  .delta.down { background: var(--bad-soft); color: var(--bad); }
+
+  /* ---------- tablas ---------- */
+  .table-scroll { overflow-x: auto; }
+  table.grid { width: 100%; font-size: 13px; min-width: 900px; }
+  table.grid th {
+    text-align: left; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--ink-3); font-weight: 600; padding: 10px 12px;
+    border-bottom: 1px solid var(--line); white-space: nowrap;
+    background: var(--surface);
+  }
+  table.grid td { padding: 10px 12px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+  table.grid tbody tr:hover td { background: var(--surface-2); }
+  table.grid tbody tr:last-child td { border-bottom: 0; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  .code { font-family: var(--mono); color: var(--ink-2); }
+  .name { font-weight: 600; }
+  .sub { display: block; font-size: 11.5px; color: var(--ink-3); font-weight: 400; }
+
+  /* ---------- chips y medidores ---------- */
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 9px; border-radius: 20px;
+    font-size: 11.5px; font-weight: 600; letter-spacing: .02em; white-space: nowrap;
+  }
+  .chip.a { background: var(--ok-soft); color: var(--ok); }
+  .chip.b { background: var(--accent-soft); color: var(--accent); }
+  .chip.c { background: var(--warn-soft); color: var(--warn); }
+  .chip.d { background: var(--bad-soft); color: var(--bad); }
+  .chip.neutral { background: var(--surface-2); color: var(--ink-2); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+  .score-cell { display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
+  .meter { width: 74px; height: 6px; border-radius: 4px; background: var(--surface-2); overflow: hidden; flex: none; }
+  .meter span { display: block; height: 100%; border-radius: 4px; }
+  .m-a span, .bar-a { background: var(--ok); }
+  .m-b span, .bar-b { background: var(--accent); }
+  .m-c span, .bar-c { background: var(--warn); }
+  .m-d span, .bar-d { background: var(--bad); }
+  .trend { font-family: var(--mono); font-size: 12px; }
+  .trend.up { color: var(--ok); }
+  .trend.down { color: var(--bad); }
+  .trend.flat { color: var(--ink-3); }
+
+  .tag-src {
+    font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; font-weight: 600;
+    padding: 1px 7px; border-radius: 4px; border: 1px solid var(--line);
+    color: var(--ink-3); white-space: nowrap;
+  }
+  .tag-src.auto { border-color: var(--accent); color: var(--accent); }
+  .tag-src.manual { border-color: var(--warn); color: var(--warn); }
+  .tag-src.falta { border-color: var(--bad); color: var(--bad); }
+
+  /* ---------- ficha ---------- */
+  .ficha-head {
+    display: flex; gap: 22px; align-items: center; flex-wrap: wrap;
+    padding: 20px;
+  }
+  .score-big {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    width: 118px; height: 118px; border-radius: 12px; flex: none;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .score-big b { font-family: var(--mono); font-size: 38px; font-weight: 700; letter-spacing: -.03em; line-height: 1; }
+  .score-big span { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; margin-top: 6px; font-weight: 600; }
+  .ficha-meta { display: flex; gap: 26px; flex-wrap: wrap; margin-top: 12px; }
+  .ficha-meta div { font-size: 12px; color: var(--ink-3); }
+  .ficha-meta strong { display: block; font-size: 13.5px; color: var(--ink); font-weight: 600; }
+
+  .two-col { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+  @media (max-width: 920px) { .two-col { grid-template-columns: 1fr; } }
+
+  .crit { display: flex; flex-direction: column; gap: 16px; }
+  .crit-item { display: grid; grid-template-columns: 1fr auto; gap: 4px 14px; }
+  .crit-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .crit-top b { font-size: 13.5px; font-weight: 600; }
+  .crit-peso { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); }
+  .crit-evidencia { font-size: 12.5px; color: var(--ink-2); grid-column: 1 / -1; }
+  .crit-pts { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 13.5px; font-weight: 600; text-align: right; white-space: nowrap; }
+  .crit-pts small { color: var(--ink-3); font-weight: 400; }
+  .bar { grid-column: 1 / -1; height: 7px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+  .bar i { display: block; height: 100%; border-radius: 4px; }
+
+  .hist { display: flex; align-items: flex-end; gap: 12px; height: 108px; padding-top: 6px; }
+  .hist-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; justify-content: flex-end; height: 100%; }
+  .hist-bar { width: 100%; border-radius: 4px 4px 0 0; background: var(--accent); opacity: .35; }
+  .hist-col.now .hist-bar { opacity: 1; }
+  .hist-col b { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .hist-col span { font-size: 11px; color: var(--ink-3); }
+
+  .encuesta { display: flex; flex-direction: column; gap: 12px; }
+  .encuesta-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .encuesta-row span { font-size: 13px; }
+  .stars { display: flex; gap: 3px; }
+  .stars i { width: 15px; height: 15px; border-radius: 3px; background: var(--surface-2); }
+  .stars i.on { background: var(--warn); }
+
+  .radar-wrap { display: flex; justify-content: center; padding: 4px 0 10px; }
+  .radar-grid { fill: none; stroke: var(--grid); stroke-width: 1; }
+  .radar-axis { stroke: var(--grid); stroke-width: 1; }
+  .radar-area { fill: var(--accent); fill-opacity: .18; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+  .radar-pt { fill: var(--accent); }
+  .radar-label { font-family: var(--sans); font-size: 10.5px; fill: var(--ink-3); }
+
+  ul.notes { display: flex; flex-direction: column; gap: 10px; }
+  ul.notes li { display: flex; gap: 10px; font-size: 13px; color: var(--ink-2); }
+  ul.notes li::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); margin-top: 8px; flex: none; }
+
+  .inc { display: flex; flex-direction: column; gap: 10px; }
+  .inc-item { display: flex; gap: 10px; align-items: flex-start; font-size: 12.5px; }
+  .inc-item time { font-family: var(--mono); color: var(--ink-3); white-space: nowrap; }
+
+  /* ---------- criterios ---------- */
+  .pesos-foot { display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-top: 1px solid var(--line-soft); font-size: 13px; }
+  .escala { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+  .escala-item { border: 1px solid var(--line); border-radius: 9px; padding: 14px; display: flex; flex-direction: column; gap: 6px; }
+  .escala-item b { font-size: 14px; }
+  .escala-item .rango { font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); }
+  .escala-item p { font-size: 12.5px; color: var(--ink-3); }
+
+  /* ---------- reporte (papel) ---------- */
+  .paper-rail { display: flex; gap: 24px; overflow-x: auto; padding: 6px 2px 18px; }
+  .paper {
+    background: #ffffff; color: #1b2228;
+    width: 620px; flex: none;
+    border: 1px solid #d3d8dc; border-radius: 3px;
+    box-shadow: 0 12px 36px -20px rgba(0,0,0,.55);
+    padding: 34px 38px;
+    font-size: 11.5px; line-height: 1.45;
+  }
+  .paper h4 { font-family: var(--serif); font-size: 16px; text-align: center; letter-spacing: .02em; }
+  .paper .emp { text-align: center; font-weight: 700; font-size: 12.5px; letter-spacing: .06em; }
+  .paper .sub-emp { text-align: center; font-size: 10.5px; color: #5c676f; }
+  .paper hr { border: 0; border-top: 1px solid #c9d0d5; margin: 12px 0; }
+  .paper table { width: 100%; font-size: 10.5px; }
+  .paper th { text-align: left; border-bottom: 1px solid #98a3aa; padding: 5px 6px; font-size: 9.5px; letter-spacing: .05em; text-transform: uppercase; color: #4d585f; }
+  .paper td { padding: 5px 6px; border-bottom: 1px solid #e3e7ea; }
+  .paper .n { font-family: var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+  .paper-meta { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 18px; font-size: 10.5px; margin: 10px 0 14px; }
+  .paper-meta span { color: #5c676f; }
+  .paper-total { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding: 9px 12px; background: #f1f4f5; border-radius: 4px; }
+  .paper-total b { font-family: var(--mono); font-size: 17px; }
+  .firmas { display: flex; gap: 40px; margin-top: 46px; }
+  .firma { flex: 1; border-top: 1px solid #8d979e; padding-top: 5px; text-align: center; font-size: 10px; color: #4d585f; }
+  .paper-label { font-size: 12px; color: var(--ink-3); margin-bottom: 8px; }
+  .paper-block { display: flex; flex-direction: column; }
+
+  /* ---------- hallazgos ---------- */
+  .gap-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+  .gap {
+    border: 1px solid var(--line); border-radius: 9px; padding: 16px;
+    display: flex; flex-direction: column; gap: 8px; background: var(--surface);
+  }
+  .gap h4 { font-size: 13.5px; font-weight: 600; }
+  .gap p { font-size: 12.5px; color: var(--ink-2); }
+  .gap code { font-family: var(--mono); font-size: 11.5px; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; color: var(--ink-2); }
+
+  ol.decisiones { display: flex; flex-direction: column; gap: 12px; counter-reset: d; }
+  ol.decisiones li { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: baseline; font-size: 13px; }
+  ol.decisiones li::before {
+    counter-increment: d; content: "D" counter(d);
+    font-family: var(--mono); font-size: 11.5px; font-weight: 700; color: var(--accent);
+    background: var(--accent-soft); border-radius: 5px; padding: 2px 7px;
+  }
+  ol.decisiones b { font-weight: 600; }
+  ol.decisiones span { color: var(--ink-2); }
+
+  .footnote { font-size: 12px; color: var(--ink-3); margin-top: 26px; text-align: center; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="mark">
+      <span class="mark-badge" aria-hidden="true">EP</span>
+      <span>Evaluación de proveedores<small>Prototipo · no conectado a datos</small></span>
+    </div>
+    <div class="ctx">
+      <div>Empresa<strong>MERENDON</strong></div>
+      <div>Período<strong>2026 · Trimestre II</strong></div>
+      <div>Corte<strong>30/06/2026</strong></div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <div style="padding-top:26px">
+    <p class="eyebrow">Compras · Proveedores</p>
+    <h1 class="page-title">Scorecard de proveedores</h1>
+    <p class="page-sub">
+      Califica a cada proveedor por período combinando lo que ya registra el sistema —órdenes de compra,
+      recepciones, facturas y pagos— con la evaluación cualitativa que captura el encargado de compras.
+      Las cifras de este prototipo son de ejemplo.
+    </p>
+  </div>
+
+  <nav class="tabs" role="tablist" aria-label="Secciones del prototipo">
+    <button class="tab" role="tab" id="t-panel" aria-controls="p-panel" aria-selected="true">Panel del período</button>
+    <button class="tab" role="tab" id="t-ficha" aria-controls="p-ficha" aria-selected="false">Ficha del proveedor</button>
+    <button class="tab" role="tab" id="t-criterios" aria-controls="p-criterios" aria-selected="false">Criterios y pesos</button>
+    <button class="tab" role="tab" id="t-reporte" aria-controls="p-reporte" aria-selected="false">Reporte</button>
+    <button class="tab" role="tab" id="t-datos" aria-controls="p-datos" aria-selected="false">Qué se puede medir hoy</button>
+  </nav>
+
+  <!-- ============ PANEL ============ -->
+  <section class="panel stack" id="p-panel" role="tabpanel" aria-labelledby="t-panel">
+
+    <div class="card">
+      <div class="filters">
+        <div class="field">
+          <label for="f-periodo">Período</label>
+          <select class="control" id="f-periodo">
+            <option>2026 · Trimestre II (abr–jun)</option>
+            <option>2026 · Trimestre I (ene–mar)</option>
+            <option>2025 · Trimestre IV (oct–dic)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-tipo">Tipo de proveedor</label>
+          <select class="control" id="f-tipo">
+            <option>Todos</option>
+            <option>Materiales y suministros</option>
+            <option>Servicios</option>
+            <option>Transporte</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-clase">Clasificación</label>
+          <select class="control" id="f-clase">
+            <option>Todas</option>
+            <option>A · Confiable</option>
+            <option>B · Aceptable</option>
+            <option>C · Condicionado</option>
+            <option>D · No aceptable</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-min">Compras mínimas (L)</label>
+          <input class="control" id="f-min" value="10,000.00" inputmode="decimal">
+        </div>
+        <div class="btn-row">
+          <button class="btn">Exportar</button>
+          <button class="btn primary">Recalcular período</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="card kpi">
+        <div class="label">Proveedores evaluados</div>
+        <div class="value">24</div>
+        <div class="foot">de 63 activos con compras en el período</div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Calificación promedio</div>
+        <div class="value">79.8</div>
+        <div class="foot"><span class="delta up">+3.1</span> contra el trimestre anterior</div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Clase A · confiables</div>
+        <div class="value">6</div>
+        <div class="foot">concentran el 58% de la compra</div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Condicionados o no aceptables</div>
+        <div class="value">5</div>
+        <div class="foot"><span class="delta down">+2</span> requieren plan de acción</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h3 class="sec">Ranking del período</h3>
+        <p>9 de 24 · ordenado por calificación</p>
+        <div class="btn-row"><button class="btn">Columnas</button></div>
+      </div>
+      <div class="table-scroll">
+        <table class="grid">
+          <thead>
+            <tr>
+              <th>Proveedor</th>
+              <th class="num">Compras (L)</th>
+              <th class="num">O/C</th>
+              <th class="num">Entrega</th>
+              <th class="num">Completo</th>
+              <th class="num">Precio</th>
+              <th class="num">Calidad</th>
+              <th class="num">Docs.</th>
+              <th class="num">Servicio</th>
+              <th class="num">Calificación</th>
+              <th>Clase</th>
+              <th class="num">Tend.</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="name">Químicos del Valle, S. de R.L.<span class="sub code">0142 · Materiales y suministros</span></span></td>
+              <td class="num">1,284,300.00</td><td class="num">11</td>
+              <td class="num">96</td><td class="num">99</td><td class="num">95</td><td class="num">94</td><td class="num">100</td><td class="num">90</td>
+              <td class="num"><div class="score-cell"><div class="meter m-a"><span style="width:96%"></span></div><b>95.9</b></div></td>
+              <td><span class="chip a"><i class="dot"></i>A</span></td>
+              <td class="num trend up">▲ 2.4</td>
+            </tr>
+            <tr>
+              <td><span class="name">Tubos y Conexiones Sula<span class="sub code">0207 · Materiales y suministros</span></span></td>
+              <td class="num">742,180.00</td><td class="num">9</td>
+              <td class="num">92</td><td class="num">96</td><td class="num">90</td><td class="num">92</td><td class="num">100</td><td class="num">86</td>
+              <td class="num"><div class="score-cell"><div class="meter m-a"><span style="width:93%"></span></div><b>92.7</b></div></td>
+              <td><span class="chip a"><i class="dot"></i>A</span></td>
+              <td class="num trend up">▲ 1.1</td>
+            </tr>
+            <tr>
+              <td><span class="name">Suministros Eléctricos Cortés<span class="sub code">0311 · Materiales y suministros</span></span></td>
+              <td class="num">508,640.00</td><td class="num">7</td>
+              <td class="num">88</td><td class="num">94</td><td class="num">92</td><td class="num">90</td><td class="num">95</td><td class="num">88</td>
+              <td class="num"><div class="score-cell"><div class="meter m-a"><span style="width:91%"></span></div><b>90.9</b></div></td>
+              <td><span class="chip a"><i class="dot"></i>A</span></td>
+              <td class="num trend flat">— 0.3</td>
+            </tr>
+            <tr style="background:var(--accent-soft)">
+              <td><span class="name">Distribuidora Ferretera El Yunque<span class="sub code">0088 · Materiales y suministros</span></span></td>
+              <td class="num">396,420.00</td><td class="num">16</td>
+              <td class="num">75</td><td class="num">94</td><td class="num">81</td><td class="num">88</td><td class="num">94</td><td class="num">80</td>
+              <td class="num"><div class="score-cell"><div class="meter m-b"><span style="width:85%"></span></div><b>84.6</b></div></td>
+              <td><span class="chip b"><i class="dot"></i>B</span></td>
+              <td class="num trend down">▼ 4.2</td>
+            </tr>
+            <tr>
+              <td><span class="name">Lubricantes Merendón<span class="sub code">0455 · Materiales y suministros</span></span></td>
+              <td class="num">288,900.00</td><td class="num">6</td>
+              <td class="num">80</td><td class="num">88</td><td class="num">78</td><td class="num">85</td><td class="num">90</td><td class="num">75</td>
+              <td class="num"><div class="score-cell"><div class="meter m-b"><span style="width:83%"></span></div><b>82.8</b></div></td>
+              <td><span class="chip b"><i class="dot"></i>B</span></td>
+              <td class="num trend up">▲ 0.9</td>
+            </tr>
+            <tr>
+              <td><span class="name">Papelería y Equipos Central<span class="sub code">0132 · Materiales y suministros</span></span></td>
+              <td class="num">96,750.00</td><td class="num">12</td>
+              <td class="num">72</td><td class="num">90</td><td class="num">85</td><td class="num">80</td><td class="num">85</td><td class="num">70</td>
+              <td class="num"><div class="score-cell"><div class="meter m-b"><span style="width:80%"></span></div><b>80.3</b></div></td>
+              <td><span class="chip b"><i class="dot"></i>B</span></td>
+              <td class="num trend flat">— 0.1</td>
+            </tr>
+            <tr>
+              <td><span class="name">Transportes Ulúa<span class="sub code">0519 · Transporte</span></span></td>
+              <td class="num">154,000.00</td><td class="num">8</td>
+              <td class="num">61</td><td class="num">84</td><td class="num">70</td><td class="num">72</td><td class="num">80</td><td class="num">65</td>
+              <td class="num"><div class="score-cell"><div class="meter m-c"><span style="width:71%"></span></div><b>71.5</b></div></td>
+              <td><span class="chip c"><i class="dot"></i>C</span></td>
+              <td class="num trend down">▼ 6.8</td>
+            </tr>
+            <tr>
+              <td><span class="name">Repuestos Diesel del Norte<span class="sub code">0274 · Materiales y suministros</span></span></td>
+              <td class="num">212,340.00</td><td class="num">10</td>
+              <td class="num">55</td><td class="num">76</td><td class="num">64</td><td class="num">66</td><td class="num">70</td><td class="num">60</td>
+              <td class="num"><div class="score-cell"><div class="meter m-c"><span style="width:65%"></span></div><b>64.8</b></div></td>
+              <td><span class="chip c"><i class="dot"></i>C</span></td>
+              <td class="num trend down">▼ 3.5</td>
+            </tr>
+            <tr>
+              <td><span class="name">Servicios Industriales GEA<span class="sub code">0603 · Servicios</span></span></td>
+              <td class="num">88,500.00</td><td class="num">5</td>
+              <td class="num">42</td><td class="num">70</td><td class="num">58</td><td class="num">55</td><td class="num">60</td><td class="num">50</td>
+              <td class="num"><div class="score-cell"><div class="meter m-d"><span style="width:55%"></span></div><b>55.2</b></div></td>
+              <td><span class="chip d"><i class="dot"></i>D</span></td>
+              <td class="num trend down">▼ 9.4</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pesos-foot">
+        <span style="color:var(--ink-3)">Cada columna es el porcentaje de logro del criterio (0–100); la calificación es el promedio ponderado según los pesos vigentes.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FICHA ============ -->
+  <section class="panel stack" id="p-ficha" role="tabpanel" aria-labelledby="t-ficha" hidden>
+
+    <div class="card">
+      <div class="ficha-head">
+        <div class="score-big">
+          <b>84.6</b><span>Clase B</span>
+        </div>
+        <div style="flex:1; min-width:260px">
+          <p class="eyebrow">Proveedor 0088</p>
+          <h2 class="page-title" style="font-size:22px">Distribuidora Ferretera El Yunque</h2>
+          <div class="ficha-meta">
+            <div>RTN<strong>08019014235871</strong></div>
+            <div>Tipo<strong>Materiales y suministros</strong></div>
+            <div>Término de pago<strong>Crédito 30 días</strong></div>
+            <div>Compras del período<strong>L 396,420.00</strong></div>
+            <div>Clase anterior<strong>B (88.8)</strong></div>
+          </div>
+        </div>
+        <div class="btn-row" style="align-self:flex-start">
+          <button class="btn">Estado de cuenta</button>
+          <button class="btn">Imprimir ficha</button>
+          <button class="btn primary">Guardar evaluación</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="stack">
+
+        <div class="card">
+          <div class="card-head">
+            <h3 class="sec">Desglose por criterio</h3>
+            <p>16 órdenes · 18 recepciones · abr–jun 2026</p>
+          </div>
+          <div class="card-body crit">
+
+            <div class="crit-item">
+              <div class="crit-top">
+                <b>Cumplimiento de entrega</b>
+                <span class="crit-peso">peso 25%</span>
+                <span class="tag-src auto">Automático</span>
+              </div>
+              <div class="crit-pts">18.75 <small>/ 25</small></div>
+              <div class="crit-evidencia">12 de 16 órdenes recibidas dentro del plazo pactado · atraso promedio 3.4 días · máximo 11 días (O/C 00427)</div>
+              <div class="bar"><i class="bar-c" style="width:75%"></i></div>
+            </div>
+
+            <div class="crit-item">
+              <div class="crit-top">
+                <b>Completitud del pedido</b>
+                <span class="crit-peso">peso 20%</span>
+                <span class="tag-src auto">Automático</span>
+              </div>
+              <div class="crit-pts">18.80 <small>/ 20</small></div>
+              <div class="crit-evidencia">94.2% de las cantidades pedidas fueron recibidas · 3 órdenes cerradas con faltante</div>
+              <div class="bar"><i class="bar-a" style="width:94%"></i></div>
+            </div>
+
+            <div class="crit-item">
+              <div class="crit-top">
+                <b>Exactitud de precio</b>
+                <span class="crit-peso">peso 15%</span>
+                <span class="tag-src auto">Automático</span>
+              </div>
+              <div class="crit-pts">12.15 <small>/ 15</small></div>
+              <div class="crit-evidencia">13 de 16 facturas coinciden con el costo de la orden (tolerancia 2%) · desviación promedio +1.8%</div>
+              <div class="bar"><i class="bar-b" style="width:81%"></i></div>
+            </div>
+
+            <div class="crit-item">
+              <div class="crit-top">
+                <b>Calidad de lo recibido</b>
+                <span class="crit-peso">peso 20%</span>
+                <span class="tag-src manual">Incidencias capturadas</span>
+              </div>
+              <div class="crit-pts">17.50 <small>/ 20</small></div>
+              <div class="crit-evidencia">2 incidencias en 18 recepciones · 1 devolución por material dañado, 1 por especificación distinta</div>
+              <div class="bar"><i class="bar-a" style="width:88%"></i></div>
+            </div>
+
+            <div class="crit-item">
+              <div class="crit-top">
+                <b>Documentación fiscal</b>
+                <span class="crit-peso">peso 10%</span>
+                <span class="tag-src auto">Automático</span>
+              </div>
+              <div class="crit-pts">9.40 <small>/ 10</small></div>
+              <div class="crit-evidencia">17 de 18 facturas con CAI y número SAR válidos · 1 recibida sin CAI (F-00918)</div>
+              <div class="bar"><i class="bar-a" style="width:94%"></i></div>
+            </div>
+
+            <div class="crit-item">
+              <div class="crit-top">
+                <b>Servicio y respuesta</b>
+                <span class="crit-peso">peso 10%</span>
+                <span class="tag-src manual">Encuesta</span>
+              </div>
+              <div class="crit-pts">8.00 <small>/ 10</small></div>
+              <div class="crit-evidencia">Promedio 4.0 de 5 · evaluado por J. Cardona el 05/07/2026</div>
+              <div class="bar"><i class="bar-b" style="width:80%"></i></div>
+            </div>
+
+          </div>
+          <div class="pesos-foot">
+            <span>Total ponderado</span>
+            <span style="margin-left:auto; font-family:var(--mono); font-size:16px; font-weight:700">84.60</span>
+            <span class="chip b"><i class="dot"></i>Clase B · Aceptable</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3 class="sec">Evidencia · órdenes del período</h3>
+            <p>de dónde salen los porcentajes de arriba</p>
+          </div>
+          <div class="table-scroll">
+            <table class="grid" style="min-width:760px">
+              <thead>
+                <tr>
+                  <th>O/C</th><th>Emitida</th><th>Compromiso</th><th>Recibida</th>
+                  <th class="num">Atraso</th><th class="num">Recibido</th><th class="num">Desv. precio</th><th>Factura</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td class="code">00427</td><td>08/04/2026</td><td>15/04/2026</td><td>26/04/2026</td>
+                    <td class="num" style="color:var(--bad)">+11 d</td><td class="num">100%</td><td class="num">+0.0%</td><td class="code">F-00841</td></tr>
+                <tr><td class="code">00438</td><td>17/04/2026</td><td>24/04/2026</td><td>24/04/2026</td>
+                    <td class="num" style="color:var(--ok)">a tiempo</td><td class="num">100%</td><td class="num">+0.0%</td><td class="code">F-00863</td></tr>
+                <tr><td class="code">00446</td><td>02/05/2026</td><td>12/05/2026</td><td>14/05/2026</td>
+                    <td class="num" style="color:var(--warn)">+2 d</td><td class="num">82%</td><td class="num">+3.4%</td><td class="code">F-00879</td></tr>
+                <tr><td class="code">00459</td><td>19/05/2026</td><td>26/05/2026</td><td>26/05/2026</td>
+                    <td class="num" style="color:var(--ok)">a tiempo</td><td class="num">100%</td><td class="num">+0.0%</td><td class="code">F-00902</td></tr>
+                <tr><td class="code">00471</td><td>04/06/2026</td><td>11/06/2026</td><td>16/06/2026</td>
+                    <td class="num" style="color:var(--bad)">+5 d</td><td class="num">91%</td><td class="num">+2.6%</td><td class="code">F-00918</td></tr>
+                <tr><td class="code">00483</td><td>22/06/2026</td><td>29/06/2026</td><td>29/06/2026</td>
+                    <td class="num" style="color:var(--ok)">a tiempo</td><td class="num">100%</td><td class="num">+0.0%</td><td class="code">F-00944</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="pesos-foot">
+            <span style="color:var(--ink-3)">Muestra 6 de 16 órdenes. La columna <b>Compromiso</b> es la fecha de entrega pactada, que la orden de compra ya captura desde el 14/08/2026; las órdenes anteriores a esa fecha no la tienen y quedan fuera del cálculo.</span>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="stack">
+
+        <div class="card">
+          <div class="card-head"><h3 class="sec">Perfil</h3></div>
+          <div class="card-body">
+            <div class="radar-wrap">
+              <svg viewBox="0 0 300 250" width="290" height="242" role="img" aria-label="Perfil del proveedor por criterio: entrega 75, completitud 94, precio 81, calidad 88, documentos 94, servicio 80 sobre 100">
+                <polygon class="radar-grid" points="140,37 207.5,76 207.5,154 140,193 72.5,154 72.5,76"></polygon>
+                <polygon class="radar-grid" points="140,56.5 190.7,85.75 190.7,144.25 140,173.5 89.3,144.25 89.3,85.75"></polygon>
+                <polygon class="radar-grid" points="140,76 173.8,95.5 173.8,134.5 140,154 106.2,134.5 106.2,95.5"></polygon>
+                <line class="radar-axis" x1="140" y1="115" x2="140" y2="37"></line>
+                <line class="radar-axis" x1="140" y1="115" x2="207.5" y2="76"></line>
+                <line class="radar-axis" x1="140" y1="115" x2="207.5" y2="154"></line>
+                <line class="radar-axis" x1="140" y1="115" x2="140" y2="193"></line>
+                <line class="radar-axis" x1="140" y1="115" x2="72.5" y2="154"></line>
+                <line class="radar-axis" x1="140" y1="115" x2="72.5" y2="76"></line>
+                <polygon class="radar-area" points="140,56.5 203.5,78.3 194.7,146.6 140,183.3 76.5,151.7 86,83.8"></polygon>
+                <circle class="radar-pt" cx="140" cy="56.5" r="3"></circle>
+                <circle class="radar-pt" cx="203.5" cy="78.3" r="3"></circle>
+                <circle class="radar-pt" cx="194.7" cy="146.6" r="3"></circle>
+                <circle class="radar-pt" cx="140" cy="183.3" r="3"></circle>
+                <circle class="radar-pt" cx="76.5" cy="151.7" r="3"></circle>
+                <circle class="radar-pt" cx="86" cy="83.8" r="3"></circle>
+                <text class="radar-label" x="140" y="26" text-anchor="middle">Entrega</text>
+                <text class="radar-label" x="214" y="70" text-anchor="start">Completitud</text>
+                <text class="radar-label" x="214" y="163" text-anchor="start">Precio</text>
+                <text class="radar-label" x="140" y="211" text-anchor="middle">Calidad</text>
+                <text class="radar-label" x="66" y="163" text-anchor="end">Documentos</text>
+                <text class="radar-label" x="66" y="70" text-anchor="end">Servicio</text>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3 class="sec">Historial</h3><p>últimos 4 períodos</p></div>
+          <div class="card-body">
+            <div class="hist">
+              <div class="hist-col"><b>81.2</b><div class="hist-bar" style="height:57%"></div><span>2025-T3</span></div>
+              <div class="hist-col"><b>86.4</b><div class="hist-bar" style="height:66%"></div><span>2025-T4</span></div>
+              <div class="hist-col"><b>88.8</b><div class="hist-bar" style="height:71%"></div><span>2026-T1</span></div>
+              <div class="hist-col now"><b>84.6</b><div class="hist-bar" style="height:63%"></div><span>2026-T2</span></div>
+            </div>
+          </div>
+          <div class="pesos-foot"><span style="color:var(--ink-3)">Bajó 4.2 puntos: todo el retroceso viene del criterio de entrega.</span></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3 class="sec">Evaluación cualitativa</h3><p>la captura el comprador</p></div>
+          <div class="card-body encuesta">
+            <div class="encuesta-row"><span>Atención y comunicación</span>
+              <div class="stars" aria-label="4 de 5"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div></div>
+            <div class="encuesta-row"><span>Tiempo de respuesta a cotizaciones</span>
+              <div class="stars" aria-label="4 de 5"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div></div>
+            <div class="encuesta-row"><span>Soporte posventa y garantías</span>
+              <div class="stars" aria-label="3 de 5"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></div></div>
+            <div class="encuesta-row"><span>Flexibilidad ante urgencias</span>
+              <div class="stars" aria-label="5 de 5"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div></div>
+            <div class="field" style="margin-top:6px">
+              <label for="obs">Observaciones y plan de acción</label>
+              <textarea class="control" id="obs" rows="3" style="min-width:0; width:100%; resize:vertical; font-family:var(--sans)">Se le notificará el incumplimiento de entrega de la O/C 00427. Se solicita compromiso de entrega por escrito en las próximas órdenes.</textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3 class="sec">Incidencias del período</h3></div>
+          <div class="card-body inc">
+            <div class="inc-item"><time>26/04</time><span><b>Entrega tardía</b> · O/C 00427, 11 días de atraso, obra detenida.</span></div>
+            <div class="inc-item"><time>14/05</time><span><b>Devolución</b> · 40 m de manguera con daño de transporte (F-00879).</span></div>
+            <div class="inc-item"><time>16/06</time><span><b>Factura sin CAI</b> · F-00918 recibida sin CAI; se corrigió el 19/06.</span></div>
+            <div class="btn-row" style="margin-left:0"><button class="btn">Registrar incidencia</button></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CRITERIOS ============ -->
+  <section class="panel stack" id="p-criterios" role="tabpanel" aria-labelledby="t-criterios" hidden>
+
+    <div class="card">
+      <div class="card-head">
+        <h3 class="sec">Criterios de evaluación</h3>
+        <p>configurables por empresa · versionados por período</p>
+        <div class="btn-row"><button class="btn">Agregar criterio</button><button class="btn primary">Guardar</button></div>
+      </div>
+      <div class="table-scroll">
+        <table class="grid" style="min-width:960px">
+          <thead>
+            <tr>
+              <th>Criterio</th><th class="num">Peso</th><th>Origen del dato</th><th>Cómo se calcula</th><th>Meta</th><th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="name">Cumplimiento de entrega<span class="sub">Puntualidad contra la fecha pactada</span></span></td>
+              <td class="num">25%</td>
+              <td><span class="tag-src auto">Automático</span></td>
+              <td>Órdenes recibidas a tiempo ÷ órdenes recibidas</td>
+              <td class="num">≥ 95%</td>
+              <td><span class="chip a"><i class="dot"></i>Listo · desde 14/08/2026</span></td>
+            </tr>
+            <tr>
+              <td><span class="name">Completitud del pedido<span class="sub">Fill rate por cantidad</span></span></td>
+              <td class="num">20%</td>
+              <td><span class="tag-src auto">Automático</span></td>
+              <td>Σ cantidad aplicada ÷ Σ cantidad pedida</td>
+              <td class="num">≥ 98%</td>
+              <td><span class="chip a"><i class="dot"></i>Listo con datos actuales</span></td>
+            </tr>
+            <tr>
+              <td><span class="name">Exactitud de precio<span class="sub">Lo facturado contra lo pactado</span></span></td>
+              <td class="num">15%</td>
+              <td><span class="tag-src auto">Automático</span></td>
+              <td>Renglones dentro de la tolerancia ÷ renglones facturados</td>
+              <td class="num">≥ 98%</td>
+              <td><span class="chip a"><i class="dot"></i>Listo con datos actuales</span></td>
+            </tr>
+            <tr>
+              <td><span class="name">Calidad de lo recibido<span class="sub">Rechazos y devoluciones</span></span></td>
+              <td class="num">20%</td>
+              <td><span class="tag-src manual">Manual</span></td>
+              <td>1 − (recepciones con incidencia ÷ recepciones)</td>
+              <td class="num">≤ 2% con incidencia</td>
+              <td><span class="chip c"><i class="dot"></i>Necesita bitácora de incidencias</span></td>
+            </tr>
+            <tr>
+              <td><span class="name">Documentación fiscal<span class="sub">CAI, número SAR y RTN correctos</span></span></td>
+              <td class="num">10%</td>
+              <td><span class="tag-src auto">Automático</span></td>
+              <td>Facturas completas ÷ facturas recibidas</td>
+              <td class="num">100%</td>
+              <td><span class="chip a"><i class="dot"></i>Listo con datos actuales</span></td>
+            </tr>
+            <tr>
+              <td><span class="name">Servicio y respuesta<span class="sub">Encuesta del comprador, escala 1–5</span></span></td>
+              <td class="num">10%</td>
+              <td><span class="tag-src manual">Encuesta</span></td>
+              <td>Promedio de las 4 preguntas × 20</td>
+              <td class="num">≥ 4.0</td>
+              <td><span class="chip b"><i class="dot"></i>Se captura en la ficha</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pesos-foot">
+        <span>Suma de pesos</span>
+        <span class="chip a" style="margin-left:6px"><i class="dot"></i>100%</span>
+        <span style="color:var(--ink-3); margin-left:auto">No se puede guardar si la suma es distinta de 100.</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h3 class="sec">Escala de clasificación</h3>
+        <p>define el color del semáforo y qué acción dispara</p>
+      </div>
+      <div class="card-body escala">
+        <div class="escala-item">
+          <span class="chip a"><i class="dot"></i>A · Confiable</span>
+          <b class="rango">90.0 – 100.0</b>
+          <p>Compra directa autorizada. Elegible para acuerdos de precio anual.</p>
+        </div>
+        <div class="escala-item">
+          <span class="chip b"><i class="dot"></i>B · Aceptable</span>
+          <b class="rango">75.0 – 89.9</b>
+          <p>Opera normal. Se le comunican las desviaciones del período.</p>
+        </div>
+        <div class="escala-item">
+          <span class="chip c"><i class="dot"></i>C · Condicionado</span>
+          <b class="rango">60.0 – 74.9</b>
+          <p>Requiere plan de acción y segunda cotización obligatoria.</p>
+        </div>
+        <div class="escala-item">
+          <span class="chip d"><i class="dot"></i>D · No aceptable</span>
+          <b class="rango">0.0 – 59.9</b>
+          <p>Se suspende la emisión de órdenes hasta reevaluación.</p>
+        </div>
+      </div>
+      <div class="pesos-foot">
+        <span style="color:var(--ink-3)">Los rangos son configurables. El prototipo asume 4 clases; si prefieren 3 (Aprobado / Condicionado / Rechazado) se ajusta.</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3 class="sec">Reglas del período</h3></div>
+      <div class="card-body">
+        <ul class="notes">
+          <li>Se evalúa por trimestre. Solo entran proveedores con al menos una recepción y compras sobre el mínimo configurado (L 10,000.00).</li>
+          <li>La calificación se congela al cerrar el período: recalcular vuelve a leer los documentos, pero una evaluación cerrada queda como historial.</li>
+          <li>Un criterio sin datos en el período no arrastra la nota hacia abajo: su peso se redistribuye entre los demás y la ficha lo indica.</li>
+          <li>La evaluación cualitativa la captura quien tenga el permiso de compras; el resto solo consulta.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ REPORTE ============ -->
+  <section class="panel stack" id="p-reporte" role="tabpanel" aria-labelledby="t-reporte" hidden>
+
+    <div class="card">
+      <div class="filters">
+        <div class="field">
+          <label for="r-formato">Formato</label>
+          <select class="control" id="r-formato">
+            <option>Ficha de evaluación (por proveedor)</option>
+            <option>Cuadro comparativo del período</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="r-periodo">Período</label>
+          <select class="control" id="r-periodo"><option>2026 · Trimestre II</option></select>
+        </div>
+        <div class="btn-row">
+          <button class="btn">Excel</button>
+          <button class="btn primary">Generar PDF</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="paper-rail">
+
+      <div class="paper-block">
+        <p class="paper-label">Formato 1 · Ficha de evaluación, una hoja por proveedor</p>
+        <article class="paper">
+          <p class="emp">MERENDON, S.A. DE C.V.</p>
+          <p class="sub-emp">RTN 08019995123456 · San Pedro Sula, Cortés</p>
+          <hr>
+          <h4>FICHA DE EVALUACIÓN DE PROVEEDOR</h4>
+          <div class="paper-meta">
+            <div><span>Proveedor:</span> <b>0088 — Distribuidora Ferretera El Yunque</b></div>
+            <div><span>Período:</span> <b>Trimestre II 2026 (abr–jun)</b></div>
+            <div><span>RTN:</span> 08019014235871</div>
+            <div><span>Emitida:</span> 14/08/2026</div>
+            <div><span>Tipo:</span> Materiales y suministros</div>
+            <div><span>Compras del período:</span> L 396,420.00</div>
+          </div>
+          <table>
+            <thead>
+              <tr><th>Criterio</th><th class="n">Peso</th><th class="n">Logro</th><th class="n">Puntos</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Cumplimiento de entrega</td><td class="n">25.00</td><td class="n">75.0%</td><td class="n">18.75</td></tr>
+              <tr><td>Completitud del pedido</td><td class="n">20.00</td><td class="n">94.0%</td><td class="n">18.80</td></tr>
+              <tr><td>Exactitud de precio</td><td class="n">15.00</td><td class="n">81.0%</td><td class="n">12.15</td></tr>
+              <tr><td>Calidad de lo recibido</td><td class="n">20.00</td><td class="n">87.5%</td><td class="n">17.50</td></tr>
+              <tr><td>Documentación fiscal</td><td class="n">10.00</td><td class="n">94.0%</td><td class="n">9.40</td></tr>
+              <tr><td>Servicio y respuesta</td><td class="n">10.00</td><td class="n">80.0%</td><td class="n">8.00</td></tr>
+            </tbody>
+          </table>
+          <div class="paper-total">
+            <span>CALIFICACIÓN FINAL · CLASE B — ACEPTABLE</span>
+            <b>84.60</b>
+          </div>
+          <p style="margin-top:14px"><b>Observaciones:</b> Se le notificará el incumplimiento de entrega de la O/C 00427.
+            Se solicita compromiso de entrega por escrito en las próximas órdenes. Reevaluación en el trimestre III.</p>
+          <div class="firmas">
+            <div class="firma">Elaborado por · Compras</div>
+            <div class="firma">Revisado por · Gerencia</div>
+          </div>
+        </article>
+      </div>
+
+      <div class="paper-block">
+        <p class="paper-label">Formato 2 · Cuadro comparativo, un renglón por proveedor</p>
+        <article class="paper">
+          <p class="emp">MERENDON, S.A. DE C.V.</p>
+          <p class="sub-emp">RTN 08019995123456 · San Pedro Sula, Cortés</p>
+          <hr>
+          <h4>EVALUACIÓN DE PROVEEDORES — TRIMESTRE II 2026</h4>
+          <p style="text-align:center; font-size:10px; color:#5c676f; margin-bottom:10px">
+            24 proveedores evaluados · calificación promedio 79.8 · emitido el 14/08/2026
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Cód.</th><th>Proveedor</th><th class="n">Compras L</th>
+                <th class="n">Ent.</th><th class="n">Com.</th><th class="n">Pre.</th><th class="n">Cal.</th><th class="n">Doc.</th><th class="n">Ser.</th>
+                <th class="n">Calif.</th><th>Cl.</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>0142</td><td>Químicos del Valle</td><td class="n">1,284,300</td><td class="n">96</td><td class="n">99</td><td class="n">95</td><td class="n">94</td><td class="n">100</td><td class="n">90</td><td class="n"><b>95.9</b></td><td>A</td></tr>
+              <tr><td>0207</td><td>Tubos y Conexiones Sula</td><td class="n">742,180</td><td class="n">92</td><td class="n">96</td><td class="n">90</td><td class="n">92</td><td class="n">100</td><td class="n">86</td><td class="n"><b>92.7</b></td><td>A</td></tr>
+              <tr><td>0311</td><td>Suministros Eléctricos Cortés</td><td class="n">508,640</td><td class="n">88</td><td class="n">94</td><td class="n">92</td><td class="n">90</td><td class="n">95</td><td class="n">88</td><td class="n"><b>90.9</b></td><td>A</td></tr>
+              <tr><td>0088</td><td>Distribuidora Ferretera El Yunque</td><td class="n">396,420</td><td class="n">75</td><td class="n">94</td><td class="n">81</td><td class="n">88</td><td class="n">94</td><td class="n">80</td><td class="n"><b>84.6</b></td><td>B</td></tr>
+              <tr><td>0455</td><td>Lubricantes Merendón</td><td class="n">288,900</td><td class="n">80</td><td class="n">88</td><td class="n">78</td><td class="n">85</td><td class="n">90</td><td class="n">75</td><td class="n"><b>82.8</b></td><td>B</td></tr>
+              <tr><td>0132</td><td>Papelería y Equipos Central</td><td class="n">96,750</td><td class="n">72</td><td class="n">90</td><td class="n">85</td><td class="n">80</td><td class="n">85</td><td class="n">70</td><td class="n"><b>80.3</b></td><td>B</td></tr>
+              <tr><td>0519</td><td>Transportes Ulúa</td><td class="n">154,000</td><td class="n">61</td><td class="n">84</td><td class="n">70</td><td class="n">72</td><td class="n">80</td><td class="n">65</td><td class="n"><b>71.5</b></td><td>C</td></tr>
+              <tr><td>0274</td><td>Repuestos Diesel del Norte</td><td class="n">212,340</td><td class="n">55</td><td class="n">76</td><td class="n">64</td><td class="n">66</td><td class="n">70</td><td class="n">60</td><td class="n"><b>64.8</b></td><td>C</td></tr>
+              <tr><td>0603</td><td>Servicios Industriales GEA</td><td class="n">88,500</td><td class="n">42</td><td class="n">70</td><td class="n">58</td><td class="n">55</td><td class="n">60</td><td class="n">50</td><td class="n"><b>55.2</b></td><td>D</td></tr>
+            </tbody>
+          </table>
+          <p style="margin-top:12px; font-size:10px; color:#5c676f">
+            Ent. cumplimiento de entrega · Com. completitud · Pre. exactitud de precio · Cal. calidad ·
+            Doc. documentación fiscal · Ser. servicio. Clase: A confiable, B aceptable, C condicionado, D no aceptable.
+          </p>
+          <div class="firmas">
+            <div class="firma">Jefe de Compras</div>
+            <div class="firma">Gerencia General</div>
+          </div>
+        </article>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ DATOS ============ -->
+  <section class="panel stack" id="p-datos" role="tabpanel" aria-labelledby="t-datos" hidden>
+
+    <div class="card">
+      <div class="card-head">
+        <h3 class="sec">Lo que ya se puede calcular con lo que hay</h3>
+        <p>sin tocar la base de datos</p>
+      </div>
+      <div class="card-body gap-grid">
+        <div class="gap">
+          <h4>Cumplimiento de entrega</h4>
+          <p>La orden de compra ya guarda <code>fecha_entrega_pactada</code> (cabecera y, opcional, por renglón) desde el 14/08/2026: la recepción se compara contra ella. Solo mide órdenes emitidas de esa fecha en adelante.</p>
+          <span class="chip a"><i class="dot"></i>Disponible</span>
+        </div>
+        <div class="gap">
+          <h4>Completitud del pedido</h4>
+          <p><code>alm_orden_compra_detalle.cantidad_aplicada</code> ÷ <code>cantidad_pedida</code>. La recepción ya descarga la orden renglón por renglón.</p>
+          <span class="chip a"><i class="dot"></i>Disponible</span>
+        </div>
+        <div class="gap">
+          <h4>Exactitud de precio</h4>
+          <p>El renglón de compra guarda <code>orden_compra_detalle_id</code>, así que se compara <code>alm_compra.precio_unitario</code> contra <code>costo_unitario</code> de la orden.</p>
+          <span class="chip a"><i class="dot"></i>Disponible</span>
+        </div>
+        <div class="gap">
+          <h4>Documentación fiscal</h4>
+          <p><code>alm_compra_hdr.cai</code>, <code>numero_factura_sar</code> y el <code>rtn</code> del proveedor permiten medir facturas completas.</p>
+          <span class="chip a"><i class="dot"></i>Disponible</span>
+        </div>
+        <div class="gap">
+          <h4>Volumen y concentración</h4>
+          <p>Compras del período por proveedor y su participación, desde <code>alm_compra_hdr</code> excluyendo anuladas.</p>
+          <span class="chip a"><i class="dot"></i>Disponible</span>
+        </div>
+        <div class="gap">
+          <h4>Comportamiento de la cuenta</h4>
+          <p>Notas de crédito, anulaciones de recepción y saldos desde <code>alm_compra_cxp</code> y el estado de cuenta ya existente.</p>
+          <span class="chip a"><i class="dot"></i>Disponible</span>
+        </div>
+        <div class="gap">
+          <h4>Tiempo de ciclo interno</h4>
+          <p>Días entre <code>fecha_aprobacion</code> de la orden y la fecha de recepción. No mide al proveedor sino el circuito completo, y es lo único aplicable a las órdenes anteriores al 14/08/2026.</p>
+          <span class="chip b"><i class="dot"></i>Complementario</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h3 class="sec">Lo que falta en la base</h3>
+        <p>dos piezas, en orden de importancia</p>
+      </div>
+      <div class="card-body gap-grid">
+        <div class="gap">
+          <h4>Devoluciones e incidencias de recepción</h4>
+          <p>Hoy una devolución al proveedor se registra como ajuste genérico de inventario, sin quedar ligada al proveedor ni al motivo. Se propone una bitácora de incidencias por recepción (motivo, cantidad, documento) que también alimente el criterio de calidad.</p>
+          <span class="chip c"><i class="dot"></i>Bloquea el criterio de calidad</span>
+        </div>
+        <div class="gap">
+          <h4>Tablas de la evaluación</h4>
+          <p>Criterios y pesos, evaluación por proveedor y período, y respuestas de la encuesta. Todas por <code>company_id</code> + <code>cod_proveedor</code>, ya que el proveedor no tiene llave foránea real.</p>
+          <span class="chip b"><i class="dot"></i>Alcance normal del módulo</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h3 class="sec">Decisiones que necesito de ustedes</h3>
+        <p>de esto depende el alcance</p>
+      </div>
+      <div class="card-body">
+        <ol class="decisiones">
+          <li><span><b>Periodicidad.</b> ¿Trimestral como asume el prototipo, o mensual / semestral / anual?</span></li>
+          <li><span><b>Pesos y criterios.</b> Los seis criterios y sus pesos son una propuesta. ¿Los confirman, cambian los pesos o agregan alguno (precio contra el mercado, cumplimiento ambiental, exclusividad)?</span></li>
+          <li><span><b>Fecha de entrega pactada. <span style="color:var(--ok)">Resuelto el 14/08/2026:</span></b> se captura en la cabecera de la orden y, opcionalmente, por renglón para entregas escalonadas; es obligatoria desde el borrador. Queda pendiente decidir qué hacer con las órdenes anteriores, que no la tienen.</span></li>
+          <li><span><b>Incidencias de calidad.</b> ¿Se registran contra la recepción dentro del sistema, o el criterio se califica a mano en la encuesta?</span></li>
+          <li><span><b>Efecto de la clasificación.</b> ¿La clase D solo informa, o el sistema debe bloquear la emisión de órdenes a proveedores no aceptables?</span></li>
+          <li><span><b>Quién evalúa y quién ve.</b> ¿Un solo permiso de compras, o evaluación de compras y visto bueno de gerencia?</span></li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <p class="footnote">Prototipo · 14 de agosto de 2026 · pantallas y reporte de ejemplo, sin conexión a la base de datos.</p>
+</main>
+
+<script>
+  (function () {
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+    function select(tab) {
+      tabs.forEach(function (t) {
+        var on = t === tab;
+        t.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+      });
+      tab.focus();
+    }
+    tabs.forEach(function (tab, i) {
+      tab.addEventListener('click', function () { select(tab); });
+      tab.addEventListener('keydown', function (e) {
+        var next = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : -1;
+        if (next < 0 || next >= tabs.length) return;
+        e.preventDefault();
+        select(tabs[next]);
+      });
+    });
+  })();
+</script>

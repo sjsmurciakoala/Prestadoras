@@ -6,21 +6,6 @@
     font-display: swap;
 }
 
-@font-face {
-    font-family: "NunitoSans";
-    src: url("/fonts/NunitoSans.ttf") format("truetype");
-    font-weight: 600;
-    font-style: normal;
-    font-display: swap;
-}
-@font-face{
-    font-family: "Poppins";
-    src: url("/fonts/Poppins-Regular.ttf") format("truetype");
-    font-weight: 400;
-    font-style: normal;
-    font-display: swap;
-}
-
 @import url('open-iconic/font/css/open-iconic-bootstrap.min.css');
 
 html, body {

@@ -1,7 +1,7 @@
 ﻿@page "/presupuesto/configuraciones/nuevo"
 @page "/presupuesto/configuraciones/{IdPresupuesto}/editar"
 @page "/presupuesto/configuraciones/{IdPresupuesto}/{CuentaContable}/editar"
-@attribute [Authorize(Policy = AuthorizationPolicies.Contabilidad)]
+@attribute [Authorize(Policy = PermissionNames.Contabilidad.View)]
 
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Presupuesto

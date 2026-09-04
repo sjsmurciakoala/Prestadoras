@@ -3,7 +3,7 @@ using SIAD.Core.Tenancy;
 namespace SIAD.Core.Entities;
 
 /// <summary>
-/// Configuración de líneas del Balance General (Estado de Situación Financiera)
+/// ConfiguraciÃ³n de lÃ­neas del Balance General (Estado de SituaciÃ³n Financiera)
 /// Equivalente a C01BlSheet en sistema de referencia
 /// </summary>
 public class con_configuracion_balance : ICompanyScopedEntity

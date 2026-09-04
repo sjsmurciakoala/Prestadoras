@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using Dapper;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 using SIAD.Core.Tenancy;
@@ -48,9 +49,24 @@ public class ClientesServiceTests : IntegrationTestBase, IAsyncLifetime
     {
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
+        // El mirror es un restore de producción: no hay ids fijos garantizados. Se elige el cliente
+        // con MÁS movimientos en el histórico (transaccion_abonado, la fuente que usa el servicio),
+        // en vez de un id hardcodeado que podría no existir o no tener movimientos en la base actual.
+        var clienteId = await Connection.ExecuteScalarAsync<int?>(new CommandDefinition(@"
+            SELECT cm.maestro_cliente_id
+            FROM public.transaccion_abonado t
+            JOIN public.cliente_maestro cm
+              ON cm.company_id = t.company_id AND cm.maestro_cliente_clave = t.cliente_clave
+            WHERE t.company_id = @CompanyId
+            GROUP BY cm.maestro_cliente_id
+            ORDER BY COUNT(*) DESC
+            LIMIT 1",
+            new { CompanyId }, Transaction));
+        Skip.If(clienteId is null, "El mirror no tiene clientes con movimientos en el histórico.");
+
         // Act
         var result = await _service!.GetMovimientosPagedAsync(
-            clienteId: 102814, // Using ID with actual movements in DB
+            clienteId: clienteId!.Value,
             skip: 0,
             take: 20,
             sortField: null,
@@ -60,7 +76,6 @@ public class ClientesServiceTests : IntegrationTestBase, IAsyncLifetime
         Assert.NotNull(result);
         Assert.NotNull(result.Items);
         Assert.True(result.Items.Count > 0, "Debe retornar al menos un movimiento.");
-        System.Diagnostics.Debug.WriteLine($"Items Count: {result.Items.Count}");
     }
 
     /// <summary>

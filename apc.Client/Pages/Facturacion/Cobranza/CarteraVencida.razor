@@ -1,5 +1,5 @@
 @page "/facturacion/cobranza/cartera-vencida"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Ventas.Cobranza.View)]
 @using System.Linq
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Cobranza
@@ -20,7 +20,7 @@
 <PageTitle>SIAD - Cartera vencida</PageTitle>
 
 <div class="page-container">
-    <DxToastProvider Name="CarteraVencidaToast" MaxToastCount="4" />
+    <DxToastProvider Name="CarteraVencidaToast" MaxToastCount="4" StickToViewport="true" />
     <ErrorNotice @ref="errorNotice" />
 
     <div class="header-section mb-3">

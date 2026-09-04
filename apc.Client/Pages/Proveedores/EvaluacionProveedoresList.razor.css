@@ -1,0 +1,75 @@
+/* Sólo lo propio de esta pantalla: el estándar (page-container, modern-card, grid-*)
+   vive en apc/wwwroot/css/siad-grid.css y se hereda. */
+
+.periodo-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-bottom: 4px;
+}
+
+/* Medidor del puntaje dentro de la celda. */
+.meter {
+    width: 70px;
+    height: 6px;
+    border-radius: 4px;
+    background: #e9ecef;
+    overflow: hidden;
+    flex: none;
+}
+
+.meter span {
+    display: block;
+    height: 100%;
+    border-radius: 4px;
+}
+
+.barra-a { background: #198754; }
+.barra-b { background: #0d6efd; }
+.barra-c { background: #fd7e14; }
+.barra-d { background: #dc3545; }
+
+/* Desglose por criterio dentro de la celda: un chip por criterio. */
+.desglose {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.chip-criterio {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    padding: 1px 7px;
+    border-radius: 5px;
+    font-size: 10.5px;
+    white-space: nowrap;
+    background: #f1f3f5;
+    color: #495057;
+}
+
+.chip-criterio b {
+    font-size: 11.5px;
+    font-weight: 700;
+}
+
+.logro-alto    { background: #d1e7dd; color: #0f5132; }
+.logro-medio   { background: #cfe2ff; color: #084298; }
+.logro-bajo    { background: #fff3cd; color: #664d03; }
+.logro-critico { background: #f8d7da; color: #842029; }
+.chip-criterio.sin-datos { background: #f1f3f5; color: #adb5bd; }
+
+/* Insignia de la clase. Los colores son de dominio (semáforo), no del estándar. */
+.chip-clase {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 20px;
+    font-size: 11.5px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.clase-a { background: #d1e7dd; color: #0f5132; }
+.clase-b { background: #cfe2ff; color: #084298; }
+.clase-c { background: #fff3cd; color: #664d03; }
+.clase-d { background: #f8d7da; color: #842029; }

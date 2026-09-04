@@ -1,0 +1,203 @@
+@page "/almacen/requisiciones"
+@attribute [Authorize(Policy = PermissionNames.Inventario.View)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.Constants
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject RequisicionesDocumentoClient ReqClient
+@inject BodegasClient BodegasClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Requisiciones</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="ReqToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Requisiciones</h2>
+            <p class="page-subtitle">Solicitud → aprobación → despacho de materiales</p>
+        </div>
+        <div class="d-flex gap-2">
+            <DxButton Text="Histórico" IconCssClass="bi bi-clock-history" RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      Click="@(() => Navigation.NavigateTo("/almacen/requisiciones/historico"))" />
+            <DxButton Text="Nueva requisición" IconCssClass="bi bi-plus-lg" RenderStyle="ButtonRenderStyle.Primary"
+                      CssClass="btn-modern" Click="@(() => Navigation.NavigateTo("/almacen/requisiciones/nueva"))" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@requisiciones" KeyFieldName="@nameof(RequisicionDocumentoListItemDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom" ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving" LayoutAutoLoading="OnLayoutAutoLoading">
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)" Placeholder="Buscar solicitante, depto o número..."
+                                   InputDelay="600" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                   CssClass="me-1" Style="min-width: 240px;" />
+                        <DxComboBox Data="@estadoOpciones" Value="@filtroEstado" TData="EstadoOpcion" TValue="short?"
+                                    ValueChanged="@((short? v) => OnEstadoChanged(v))"
+                                    ValueFieldName="@nameof(EstadoOpcion.Valor)" TextFieldName="@nameof(EstadoOpcion.Texto)"
+                                    NullText="Todos los estados" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Style="min-width: 190px;" CssClass="me-1" />
+                        <DxComboBox Data="@bodegas" Value="@filtroBodegaId" TData="BodegaLookupDto" TValue="int?"
+                                    ValueChanged="@((int? v) => OnBodegaChanged(v))"
+                                    ValueFieldName="@nameof(BodegaLookupDto.Id)" TextFieldName="@nameof(BodegaLookupDto.Display)"
+                                    NullText="Todas las bodegas" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Style="min-width: 190px;" CssClass="me-1" />
+                        <DxButton Text="Pendientes de aprobar" IconCssClass="bi bi-hourglass-split"
+                                  RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                  Click="@(() => OnEstadoChanged(EstadoRequisicionHdr.EnRevision))" CssClass="me-1" />
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" />
+                        <div class="ms-auto text-muted small">Total: <span class="fw-bold">@requisiciones.Count.ToString("N0")</span></div>
+                    </div>
+                </ToolbarTemplate>
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(RequisicionDocumentoListItemDto.Numero)" Caption="N.º" Width="90px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RequisicionDocumentoListItemDto r)
+                            { <span class="text-dark fw-semibold">@r.Numero.ToString("00000")</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(RequisicionDocumentoListItemDto.Fecha)" Caption="Fecha" Width="110px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RequisicionDocumentoListItemDto r) { @r.Fecha.ToString("dd/MM/yyyy") }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(RequisicionDocumentoListItemDto.Solicitante)" Caption="Solicitante" MinWidth="150" />
+                    <DxGridDataColumn FieldName="@nameof(RequisicionDocumentoListItemDto.Departamento)" Caption="Depto" Width="90px" />
+                    <DxGridDataColumn FieldName="@nameof(RequisicionDocumentoListItemDto.BodegaNombre)" Caption="Bodega" MinWidth="130" />
+                    <DxGridDataColumn FieldName="@nameof(RequisicionDocumentoListItemDto.PorcentajeDespachado)" Caption="Despachado" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RequisicionDocumentoListItemDto r)
+                            { <span class="text-muted">@r.PorcentajeDespachado.ToString("0.#")%</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(RequisicionDocumentoListItemDto.Total)" Caption="Valor" Width="120px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RequisicionDocumentoListItemDto r) { <span>L. @r.Total.ToString("N2")</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Estado" Width="130px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RequisicionDocumentoListItemDto r)
+                            { <span class="badge @EstadoBadgeClass(r.Estado)">@EstadoTexto(r.Estado)</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Acciones" Width="90px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RequisicionDocumentoListItemDto r)
+                            {
+                                <button type="button" class="btn-icon btn-edit" title="Ver / gestionar"
+                                        @onclick="() => Ver(r.Id)" @onclick:stopPropagation="true">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+                <EmptyDataAreaTemplate><div class="p-4 text-center text-muted">No hay requisiciones para mostrar.</div></EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+@code {
+    private const string GridLayoutStorageKey = "almacen-requisiciones-doc-grid-layout";
+
+    private DxGrid? grid;
+    private List<RequisicionDocumentoListItemDto> requisiciones = new();
+    private List<BodegaLookupDto> bodegas = new();
+
+    private string filtroBusqueda = string.Empty;
+    private short? filtroEstado;
+    private int? filtroBodegaId;
+    private bool isLoading;
+    private string? errorMessage;
+
+    private sealed record EstadoOpcion(short Valor, string Texto);
+    private static readonly EstadoOpcion[] estadoOpciones =
+    [
+        new(EstadoRequisicionHdr.Borrador, "Borrador"),
+        new(EstadoRequisicionHdr.EnRevision, "En revisión"),
+        new(EstadoRequisicionHdr.Aprobada, "Aprobada"),
+        new(EstadoRequisicionHdr.DespachadaParcial, "Despachada parcial"),
+        new(EstadoRequisicionHdr.DespachadaTotal, "Despachada total"),
+        new(EstadoRequisicionHdr.Rechazada, "Rechazada"),
+        new(EstadoRequisicionHdr.Anulada, "Anulada")
+    ];
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e) => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e) => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { bodegas = await BodegasClient.GetLookupAsync(); } catch { bodegas = new(); }
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            isLoading = true; errorMessage = null;
+            requisiciones = await ReqClient.GetAsync(new RequisicionDocumentoFilterDto
+            {
+                Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
+                Estado = filtroEstado,
+                BodegaId = filtroBodegaId
+            });
+        }
+        catch (Exception ex) { errorMessage = $"No se pudieron cargar las requisiciones: {ex.Message}"; }
+        finally { isLoading = false; }
+    }
+
+    private async Task OnBusquedaChanged(string v) { filtroBusqueda = v; await CargarAsync(); }
+    private async Task OnEstadoChanged(short? v) { filtroEstado = v; await CargarAsync(); }
+    private async Task OnBodegaChanged(int? v) { filtroBodegaId = v; await CargarAsync(); }
+
+    private void Ver(int id) => Navigation.NavigateTo($"/almacen/requisiciones/{id}");
+
+    private static string EstadoTexto(short estado) => estado switch
+    {
+        EstadoRequisicionHdr.Borrador => "BORRADOR",
+        EstadoRequisicionHdr.EnRevision => "EN REVISIÓN",
+        EstadoRequisicionHdr.Aprobada => "APROBADA",
+        EstadoRequisicionHdr.DespachadaParcial => "DESP. PARCIAL",
+        EstadoRequisicionHdr.DespachadaTotal => "DESPACHADA",
+        EstadoRequisicionHdr.CerradaEnOC => "CERRADA O/C",
+        EstadoRequisicionHdr.Rechazada => "RECHAZADA",
+        EstadoRequisicionHdr.Anulada => "ANULADA",
+        _ => "—"
+    };
+
+    private static string EstadoBadgeClass(short estado) => estado switch
+    {
+        EstadoRequisicionHdr.Borrador => "bg-light text-dark border",
+        EstadoRequisicionHdr.EnRevision => "bg-warning-subtle text-warning-emphasis border border-warning-subtle",
+        EstadoRequisicionHdr.Aprobada => "bg-primary-subtle text-primary-emphasis border border-primary-subtle",
+        EstadoRequisicionHdr.DespachadaParcial => "bg-info-subtle text-info-emphasis border border-info-subtle",
+        EstadoRequisicionHdr.DespachadaTotal => "bg-success-subtle text-success-emphasis border border-success-subtle",
+        EstadoRequisicionHdr.Rechazada => "bg-danger-subtle text-danger-emphasis border border-danger-subtle",
+        EstadoRequisicionHdr.Anulada => "bg-danger-subtle text-danger-emphasis border border-danger-subtle",
+        _ => "bg-light text-dark border"
+    };
+}

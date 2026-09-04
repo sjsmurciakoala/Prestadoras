@@ -3,7 +3,7 @@ using SIAD.Core.Tenancy;
 namespace SIAD.Core.Entities;
 
 /// <summary>
-/// Configuración de líneas del Estado de Resultados
+/// ConfiguraciÃ³n de lÃ­neas del Estado de Resultados
 /// Equivalente a C01BlProfLoss en sistema de referencia
 /// </summary>
 public class con_configuracion_linea_resultado : ICompanyScopedEntity
@@ -26,7 +26,7 @@ public class con_configuracion_linea_resultado : ICompanyScopedEntity
 
     public bool mostrar_subtotal { get; set; } = false;
 
-    public byte nivel_indentacion { get; set; } = 0;  // 0, 1, 2... para sangría
+    public byte nivel_indentacion { get; set; } = 0;  // 0, 1, 2... para sangrÃ­a
 
     public DateTime created_at { get; set; } = DateTime.UtcNow;
 

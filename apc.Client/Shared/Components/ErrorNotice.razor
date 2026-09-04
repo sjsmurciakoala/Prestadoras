@@ -4,7 +4,7 @@
 @* Componente reutilizable de avisos. Muestra un toast corto y, si hay detalle tecnico,
    el toast queda clicable y abre un dialogo con el detalle copiable para Soporte. *@
 
-<DxToastProvider Name="@_providerName" MaxToastCount="4" />
+<DxToastProvider Name="@_providerName" MaxToastCount="4" StickToViewport="true" />
 
 <DxPopup Visible="@_detalleVisible"
          VisibleChanged="OnDetalleVisibleChanged"

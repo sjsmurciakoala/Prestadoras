@@ -1,0 +1,177 @@
+@page "/proveedores/retenciones/declaracion"
+@attribute [Authorize(Policy = PermissionNames.Proveedores.View)]
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Retenciones
+@using apc.Client.Services.Retenciones
+@inject RetencionRegistroClient RegistroClient
+@inject IToastNotificationService ToastService
+@inject IJSRuntime JS
+
+<PageTitle>Declaración de retenciones</PageTitle>
+
+<div class="page-container">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Declaración de retenciones</h2>
+            <p class="page-subtitle">Retenciones aplicadas por rango de fechas, agrupadas por tipo y proveedor, para la declaración mensual al SAR.</p>
+        </div>
+    </div>
+
+    <div class="modern-card summary-card mb-2">
+        <div class="d-flex flex-wrap align-items-end gap-2">
+            <div>
+                <label class="form-label-sm">Desde</label>
+                <DxDateEdit @bind-Date="filtroDesde" DisplayFormat="dd/MM/yyyy" Style="min-width: 150px;" />
+            </div>
+            <div>
+                <label class="form-label-sm">Hasta</label>
+                <DxDateEdit @bind-Date="filtroHasta" DisplayFormat="dd/MM/yyyy" Style="min-width: 150px;" />
+            </div>
+            <div>
+                <label class="form-label-sm">Estado</label>
+                <DxComboBox Data="@estadoOpciones" @bind-Value="filtroEstado"
+                            TextFieldName="@nameof(OpcionEstado.Etiqueta)"
+                            ValueFieldName="@nameof(OpcionEstado.Valor)"
+                            NullText="Todas"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            Style="min-width: 150px;" />
+            </div>
+            <div class="flex-grow-1" style="min-width: 200px;">
+                <label class="form-label-sm">Buscar</label>
+                <DxTextBox @bind-Text="filtroBusqueda" NullText="Proveedor, RTN o tipo…"
+                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </div>
+            <div>
+                <DxButton Text="Aplicar" IconCssClass="bi bi-funnel" RenderStyle="ButtonRenderStyle.Primary"
+                          Click="CargarAsync" />
+            </div>
+            <div>
+                <DxButton Text="Excel" IconCssClass="bi bi-file-earmark-excel" RenderStyle="ButtonRenderStyle.Secondary"
+                          Click="ExportarExcel" Enabled="@(filas.Count > 0)" />
+            </div>
+            <div>
+                <DxButton Text="PDF" IconCssClass="bi bi-file-earmark-pdf" RenderStyle="ButtonRenderStyle.Secondary"
+                          Click="ImprimirPdf" Enabled="@(filas.Count > 0)" />
+            </div>
+        </div>
+        <div class="mt-2 d-flex flex-wrap gap-4 total-declarar">
+            <span>Total a declarar (vigentes): <span class="fw-bold">L @TotalDeclarar.ToString("N2")</span></span>
+            <span class="text-muted">Base sujeta (vigentes): <span class="fw-semibold">L @BaseDeclarar.ToString("N2")</span></span>
+            <span class="text-muted">Líneas: <span class="fw-semibold">@filas.Count.ToString("N0")</span></span>
+        </div>
+    </div>
+
+    <div class="modern-card">
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@filas"
+                    PageSize="50"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 25, 50, 100, 200 }"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    ShowGroupPanel="true"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    CssClass="grid-solicitudes">
+                <Columns>
+                    <DxGridDataColumn FieldName="TipoDisplay" Caption="Tipo de retención" GroupIndex="0" />
+                    <DxGridDataColumn FieldName="ProveedorDisplay" Caption="Proveedor" GroupIndex="1" />
+                    <DxGridDataColumn FieldName="Folio" Caption="Folio" Width="80px" />
+                    <DxGridDataColumn FieldName="FechaEmision" Caption="Fecha" DisplayFormat="dd/MM/yyyy" Width="110px" />
+                    <DxGridDataColumn FieldName="NumeroOrden" Caption="Orden" Width="90px" />
+                    <DxGridDataColumn FieldName="NumeroAbono" Caption="Abono" Width="90px" />
+                    <DxGridDataColumn FieldName="RtnProveedor" Caption="RTN" Width="140px" />
+                    <DxGridDataColumn FieldName="Porcentaje" Caption="%" DisplayFormat="N2" Width="80px" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="BaseLinea" Caption="Base" DisplayFormat="N2" Width="130px" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="MontoRetenido" Caption="Retenido" DisplayFormat="N2" Width="130px" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="EstadoDescripcion" Caption="Estado" Width="110px" />
+                </Columns>
+                <GroupSummary>
+                    <DxGridSummaryItem SummaryType="GridSummaryItemType.Sum" FieldName="BaseLinea" ValueDisplayFormat="N2" DisplayText="Base: {0}" />
+                    <DxGridSummaryItem SummaryType="GridSummaryItemType.Sum" FieldName="MontoRetenido" ValueDisplayFormat="N2" DisplayText="Retenido: {0}" />
+                </GroupSummary>
+                <TotalSummary>
+                    <DxGridSummaryItem SummaryType="GridSummaryItemType.Sum" FieldName="BaseLinea" ValueDisplayFormat="N2" DisplayText="Base: {0}" />
+                    <DxGridSummaryItem SummaryType="GridSummaryItemType.Sum" FieldName="MontoRetenido" ValueDisplayFormat="N2" DisplayText="Retenido: {0}" />
+                </TotalSummary>
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay retenciones para el rango y estado seleccionados.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxToastProvider Name="RetencionesDeclaracionToast" MaxToastCount="3" StickToViewport="true" />
+
+<PdfPreviewPopup @ref="pdfPopup" />
+
+@code {
+    private DxGrid? grid;
+    private PdfPreviewPopup? pdfPopup;
+    private IReadOnlyList<RetencionDeclaracionLineaDto> filas = Array.Empty<RetencionDeclaracionLineaDto>();
+
+    private DateTime? filtroDesde;
+    private DateTime? filtroHasta;
+    private short? filtroEstado = EstadoRetencion.Vigente;
+    private string filtroBusqueda = string.Empty;
+
+    // El total a declarar SIEMPRE excluye anuladas, aunque el usuario esté viendo "Todas" para revisión.
+    private decimal TotalDeclarar => filas.Where(f => f.EstadoId != EstadoRetencion.Anulada).Sum(f => f.MontoRetenido);
+    private decimal BaseDeclarar => filas.Where(f => f.EstadoId != EstadoRetencion.Anulada).Sum(f => f.BaseLinea);
+
+    private readonly List<OpcionEstado> estadoOpciones =
+    [
+        new OpcionEstado(EstadoRetencion.Vigente, "Vigentes"),
+        new OpcionEstado(EstadoRetencion.Anulada, "Anuladas")
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var hoy = DateTime.Today;
+        filtroDesde = new DateTime(hoy.Year, hoy.Month, 1);
+        filtroHasta = hoy;
+        await CargarAsync();
+    }
+
+    private RetencionDeclaracionFilterDto BuildFiltro() => new()
+    {
+        Desde = filtroDesde.HasValue ? DateOnly.FromDateTime(filtroDesde.Value) : null,
+        Hasta = filtroHasta.HasValue ? DateOnly.FromDateTime(filtroHasta.Value) : null,
+        EstadoId = filtroEstado,
+        Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda.Trim()
+    };
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            filas = await RegistroClient.BuscarDeclaracionAsync(BuildFiltro());
+        }
+        catch (Exception ex)
+        {
+            filas = Array.Empty<RetencionDeclaracionLineaDto>();
+            ToastService.ShowToast(new ToastOptions
+            {
+                ProviderName = "RetencionesDeclaracionToast",
+                RenderStyle = ToastRenderStyle.Danger,
+                Title = "No se pudo cargar el reporte",
+                Text = ex.Message
+            });
+        }
+    }
+
+    private void ImprimirPdf()
+    {
+        if (filas.Count == 0) return;
+        pdfPopup?.Mostrar(RegistroClient.GetDeclaracionPdfUrl(BuildFiltro()), "Declaración de retenciones");
+    }
+
+    private async Task ExportarExcel()
+    {
+        if (grid is null || filas.Count == 0) return;
+        var stamp = DateTime.Now.ToString("yyyyMMdd_HHmm");
+        await grid.ExportToXlsxAsync($"retenciones_declaracion_{stamp}.xlsx", new GridXlExportOptions());
+    }
+
+    private sealed record OpcionEstado(short Valor, string Etiqueta);
+}

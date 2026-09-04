@@ -96,7 +96,7 @@ public sealed class AbogadosService : IAbogadosService
     {
         ArgumentNullException.ThrowIfNull(dto);
 
-        var codigo = NormalizeRequired(dto.Codigo, 50, "c骴igo", uppercase: true);
+        var codigo = NormalizeRequired(dto.Codigo, 50, "c贸digo", uppercase: true);
         var nombreCorto = NormalizeRequired(dto.NombreCorto, 100, "nombre corto");
         var nombreLargo = NormalizeOptional(dto.NombreLargo, 300);
         var telefono = NormalizeOptional(dto.Telefono, 11);
@@ -108,7 +108,7 @@ public sealed class AbogadosService : IAbogadosService
 
         if (exists)
         {
-            throw new InvalidOperationException($"Ya existe un abogado con el c骴igo {codigo}.");
+            throw new InvalidOperationException($"Ya existe un abogado con el c贸digo {codigo}.");
         }
 
         var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
@@ -142,7 +142,7 @@ public sealed class AbogadosService : IAbogadosService
 
         if (id <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(id), "El abogado no es v醠ido.");
+            throw new ArgumentOutOfRangeException(nameof(id), "El abogado no es v谩lido.");
         }
 
         var entity = await _context.abogados.FirstOrDefaultAsync(a => a.abogado_id == id, ct);
@@ -151,7 +151,7 @@ public sealed class AbogadosService : IAbogadosService
             throw new KeyNotFoundException("El abogado no existe.");
         }
 
-        var codigo = NormalizeRequired(dto.Codigo, 50, "c骴igo", uppercase: true);
+        var codigo = NormalizeRequired(dto.Codigo, 50, "c贸digo", uppercase: true);
         var nombreCorto = NormalizeRequired(dto.NombreCorto, 100, "nombre corto");
         var nombreLargo = NormalizeOptional(dto.NombreLargo, 300);
         var telefono = NormalizeOptional(dto.Telefono, 11);
@@ -163,7 +163,7 @@ public sealed class AbogadosService : IAbogadosService
 
         if (exists)
         {
-            throw new InvalidOperationException($"Ya existe un abogado con el c骴igo {codigo}.");
+            throw new InvalidOperationException($"Ya existe un abogado con el c贸digo {codigo}.");
         }
 
         entity.abogado_codigo = codigo;
@@ -190,7 +190,7 @@ public sealed class AbogadosService : IAbogadosService
     {
         if (id <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(id), "El abogado no es v醠ido.");
+            throw new ArgumentOutOfRangeException(nameof(id), "El abogado no es v谩lido.");
         }
 
         var entity = await _context.abogados.FirstOrDefaultAsync(a => a.abogado_id == id, ct);

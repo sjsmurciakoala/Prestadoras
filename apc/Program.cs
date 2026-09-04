@@ -1,5 +1,4 @@
 ﻿using apc.Client;
-using apc.Client.Pages;
 using apc.Components;
 using apc.Components.Account;
 using apc.Data;
@@ -47,6 +46,13 @@ var builder = WebApplication.CreateBuilder(args);
 // usan los valores de appsettings.json / appsettings.{Environment}.json.
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 
+// Se vuelven a aplicar DESPUES del archivo local para que conserven la ultima palabra: en el
+// orden por defecto de .NET las variables de entorno mandan sobre los JSON, y al agregar
+// appsettings.Local.json aqui se les adelantaba. Sin esto no se puede apuntar una instancia a
+// otra base (pruebas, otro entorno) sin editar el archivo.
+builder.Configuration.AddEnvironmentVariables();
+builder.Configuration.AddCommandLine(args);
+
 if (builder.Environment.IsDevelopment())
 {
     builder.Logging.ClearProviders();
@@ -57,6 +63,39 @@ if (builder.Environment.IsDevelopment())
     builder.Services.AddDataProtection()
         .SetApplicationName("HODSOFT.Prestadoras.Development")
         .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
+}
+else
+{
+    // Producción (IIS on-prem): el key-ring de DataProtection DEBE ser estable y sobrevivir a
+    // redeploys y reciclajes del App Pool. Con él se cifran secretos guardados en la BD —la API
+    // key de correo en cfg_correo (mantenimiento de SendGrid)—; si las llaves se regeneran, ese
+    // ciphertext deja de descifrarse y el envío se cae en silencio. Por defecto, ASP.NET Core en
+    // IIS guarda las llaves en un lugar NO garantizado entre máquinas ni deploys, así que aquí se
+    // fija de forma explícita:
+    //   - Carpeta FIJA fuera del publish (sobrevive a cada redeploy). Configurable con
+    //     DataProtection:KeysPath; por defecto %ProgramData%\HODSOFT\Prestadoras\DataProtectionKeys.
+    //     El identity del App Pool necesita permiso de escritura sobre esa carpeta.
+    //   - SetApplicationName estable: mismo discriminador entre redeploys del mismo entorno.
+    //   - DPAPI protege el key-ring EN REPOSO (Windows). protectToLocalMachine: true lo ata a la
+    //     máquina y no al perfil del App Pool, para que un cambio o recycle de identity no lo deje
+    //     indescifrable en este servidor dedicado on-prem.
+    var keysPath = builder.Configuration["DataProtection:KeysPath"];
+    if (string.IsNullOrWhiteSpace(keysPath))
+    {
+        keysPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "HODSOFT", "Prestadoras", "DataProtectionKeys");
+    }
+    Directory.CreateDirectory(keysPath);
+
+    var dataProtection = builder.Services.AddDataProtection()
+        .SetApplicationName("HODSOFT.Prestadoras")
+        .PersistKeysToFileSystem(new DirectoryInfo(keysPath));
+
+    if (OperatingSystem.IsWindows())
+    {
+        dataProtection.ProtectKeysWithDpapi(protectToLocalMachine: true);
+    }
 }
 
 // Add services to the container.
@@ -143,25 +182,20 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<IdentityUserAccessor>();
 builder.Services.AddScoped<IdentityRedirectManager>();
 builder.Services.AddScoped<AuthenticationStateProvider, PersistingServerAuthenticationStateProvider>();
-builder.Services.AddScoped<IClaimsTransformation, TenantCompanyClaimTransformation>();
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<apc.Security.RolePermissionCache>();
+builder.Services.AddSingleton<apc.Security.CodigoQrService>();
+builder.Services.AddScoped<TenantCompanyClaimTransformation>();
+// Una sola IClaimsTransformation: repone los permisos (que no viajan en la cookie) y encadena
+// la validación de empresa. Ver PermissionsClaimsTransformation.
+builder.Services.AddScoped<IClaimsTransformation, apc.Security.PermissionsClaimsTransformation>();
 builder.Services.AddScoped<ICompanyAccessValidator, CompanyAccessValidator>();
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy(AuthorizationPolicies.Contabilidad,
-        policy => policy.RequireRole(RoleNames.Admin, RoleNames.Contabilidad));
-    options.AddPolicy(AuthorizationPolicies.PresupuestoAprobacion,
-        policy => policy.RequireRole(RoleNames.Admin, RoleNames.Contabilidad));
-    options.AddPolicy(AuthorizationPolicies.Compras,
-        policy => policy.RequireRole(RoleNames.Admin, RoleNames.Compras));
-    options.AddPolicy(AuthorizationPolicies.Ventas,
-        policy => policy.RequireRole(RoleNames.Admin, RoleNames.Ventas));
-    options.AddPolicy(AuthorizationPolicies.Facturacion,
-        policy => policy.RequireRole(RoleNames.Admin, RoleNames.Ventas, RoleNames.Facturacion));
-    options.AddPolicy(AuthorizationPolicies.Bancos,
-        policy => policy.RequireRole(RoleNames.Admin, RoleNames.Bancos));
-    options.AddPolicy(AuthorizationPolicies.Configuracion,
-        policy => policy.RequireRole(RoleNames.Admin, RoleNames.Configuracion));
+    // Un solo camino: toda autorizacion se decide por el claim 'permission'.
+    // Las antiguas policies por rol (CanContabilidad, CanBancos, ...) se retiraron el
+    // 2026-09-01; los roles pasaron a ser solo contenedores de permisos.
     foreach (var policyDefinition in PermissionNames.Policies)
     {
         options.AddPolicy(policyDefinition.Policy,
@@ -191,9 +225,17 @@ builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.Requ
     .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddSignInManager()
+    .AddClaimsPrincipalFactory<apc.Security.SiadUserClaimsPrincipalFactory>()
     .AddDefaultTokenProviders();
 
-builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
+// Envío real de correos de Identity por SendGrid (reemplaza el No-Op). Scoped: resuelve la
+// configuración cifrada desde la BD vía ICorreoNotificador (que a su vez usa SiadDbContext).
+builder.Services.AddScoped<IEmailSender<ApplicationUser>, CorreoIdentityEmailSender>();
+
+// Resumen diario de alertas de stock por correo: barrido reutilizable + BackgroundService que lo
+// dispara a la hora configurada (Almacen:AlertasStock). Solo el portal lo corre (no los WS hosts).
+builder.Services.AddSingleton<apc.BackgroundServices.AlertasStockBarrido>();
+builder.Services.AddHostedService<apc.BackgroundServices.AlertasStockDiarioService>();
 
 // Wire SIAD layered services
 builder.Services.AddSiadServices();
@@ -238,7 +280,7 @@ app.UseDevExpressBlazorReporting();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
-    .AddAdditionalAssemblies(typeof(Counter).Assembly)
+    .AddAdditionalAssemblies(typeof(apc.Client.Routes).Assembly)
     .AllowAnonymous();
 
 app.MapAdditionalIdentityEndpoints();

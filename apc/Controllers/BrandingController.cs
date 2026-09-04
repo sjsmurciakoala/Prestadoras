@@ -28,7 +28,7 @@ public class BrandingController : ControllerBase
             branding.CompanyName,
             branding.CompanyShortName,
             LogoBase64 = hasLogo ? Convert.ToBase64String(branding.LogoBytes) : null,
-            branding.LogoMime
+            LogoMime = hasLogo ? TipoDeImagen(branding.LogoBytes, branding.LogoMime) : branding.LogoMime
         });
     }
 
@@ -81,7 +81,10 @@ public class BrandingController : ControllerBase
             using var memoryStream = new MemoryStream();
             await archivoCargado.CopyToAsync(memoryStream, ct);
             var logoBytes = memoryStream.ToArray();
-            var mime = archivoCargado.ContentType ?? "image/png";
+            // IFormFile.ContentType devuelve cadena VACIA cuando el navegador no lo manda,
+            // nunca null: por eso el "?? " de antes no se activaba y se guardaba vacio, y el
+            // logo no se podia pintar. Se deduce de los bytes, que es lo fiable.
+            var mime = TipoDeImagen(logoBytes, archivoCargado.ContentType);
 
             await _branding.GuardarLogoAsync(logoBytes, mime, ct);
             return Ok(new { mensaje = "Logo guardado correctamente." });
@@ -96,5 +99,46 @@ public class BrandingController : ControllerBase
     {
         public string CompanyName { get; set; } = string.Empty;
         public string CompanyShortName { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// Devuelve el tipo de imagen del logo. Se prefiere el guardado, pero hay filas antiguas con
+    /// <c>logo_mime</c> vacio: sin tipo, un data URI no se pinta como imagen, asi que se deduce
+    /// de los bytes. Ultimo recurso PNG, que es el formato con el que se suben casi todos.
+    /// </summary>
+    private static string TipoDeImagen(byte[] bytes, string? guardado)
+    {
+        if (!string.IsNullOrWhiteSpace(guardado))
+        {
+            return guardado;
+        }
+
+        if (bytes.Length >= 4 && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47)
+        {
+            return "image/png";
+        }
+
+        if (bytes.Length >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF)
+        {
+            return "image/jpeg";
+        }
+
+        if (bytes.Length >= 4 && bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x38)
+        {
+            return "image/gif";
+        }
+
+        if (bytes.Length >= 12 && bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46
+            && bytes[8] == 0x57 && bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50)
+        {
+            return "image/webp";
+        }
+
+        if (bytes.Length >= 1 && bytes[0] == (byte)'<')
+        {
+            return "image/svg+xml";
+        }
+
+        return "image/png";
     }
 }

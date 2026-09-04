@@ -1,5 +1,5 @@
 @page "/clientes/{Id:int}/editar"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Ventas.Clientes.Edit)]
 @using SIAD.Core.DTOs.Clientes
 @using apc.Client.Services.Clientes
 @using apc.Client.Services.Tenant
@@ -13,7 +13,7 @@
 <PageTitle>SIAD - Editar Cliente</PageTitle>
 
 <div class="page-container">
-    <DxToastProvider Name="EditClienteToast" MaxToastCount="4" />
+    <DxToastProvider Name="EditClienteToast" MaxToastCount="4" StickToViewport="true" />
 
     <div class="header-section">
         <div>

@@ -13,7 +13,7 @@
 
     <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
         <h6 class="mb-0 fw-bold"><i class="bi bi-journal-arrow-down me-1"></i>Últimos movimientos</h6>
-        <DxButton Text="Ver kardex completo" IconCssClass="bi bi-box-arrow-up-right"
+        <DxButton Text="Ver estado de cuenta completo" IconCssClass="bi bi-box-arrow-up-right"
                   RenderStyle="ButtonRenderStyle.Secondary"
                   RenderStyleMode="ButtonRenderStyleMode.Outline"
                   Click="VerKardexCompleto" />
@@ -74,6 +74,11 @@
 
             <ToolbarTemplate>
                 <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                    @* Muestra el kardex COMPLETO del artículo (con la bodega elegida si la hay)
+                       embebido en un visor, no sólo los 15 del panel — es el mismo reporte del kardex. *@
+                    <DxButton Text="Ver PDF" IconCssClass="bi bi-file-earmark-pdf"
+                              RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarPdf"
+                              Enabled="@(kardex is not null && movimientos.Count > 0)" CssClass="me-1" />
                     <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
                               RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
 
@@ -145,12 +150,59 @@
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
 
+                @* Costeo: el mismo promedio ponderado móvil que muestra el kardex completo.
+                   "Costo prom." se deriva del libro (valor acumulado ÷ saldo), así que existe
+                   también en los asientos que no posteó el motor. *@
+                <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.ValorUnitario)" Caption="Valor unit." Width="105px" TextAlignment="GridTextAlignment.Right">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is KardexMovimientoDto m)
+                        {
+                            <span class="text-muted">@m.ValorUnitario.ToString("N4")</span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.CostoPromedioCorrido)" Caption="Costo prom." Width="110px" TextAlignment="GridTextAlignment.Right">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is KardexMovimientoDto m)
+                        {
+                            @if (m.CostoPromedioCorrido.HasValue)
+                            {
+                                <span class="fw-semibold">@m.CostoPromedioCorrido.Value.ToString("N4")</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted" title="@(m.EsPreCorte ? "Anterior a la carga inicial" : "Sin saldo positivo")">—</span>
+                            }
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.ValorMovimiento)" Caption="Valor mov." Width="115px" TextAlignment="GridTextAlignment.Right">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is KardexMovimientoDto m)
+                        {
+                            <span class="@(m.ValorMovimiento < 0 ? "text-danger" : m.ValorMovimiento > 0 ? "text-success" : "text-muted")">
+                                @m.ValorMovimiento.ToString("N2")
+                            </span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
                 <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Saldo)" Caption="Saldo" Width="115px" TextAlignment="GridTextAlignment.Right">
                     <CellDisplayTemplate Context="cell">
                         @if (cell.DataItem is KardexMovimientoDto m)
                         {
-                            <span class="text-dark fw-bold">@m.Saldo.ToString("N2")</span>
-                            @UnidadSufijo()
+                            @if (m.Saldo.HasValue)
+                            {
+                                <span class="text-dark fw-bold">@m.Saldo.Value.ToString("N2")</span>
+                                @UnidadSufijo()
+                            }
+                            else
+                            {
+                                @* Movimiento anterior a la carga inicial: histórico sin saldo. *@
+                                <span class="text-muted" title="Anterior a la carga inicial">—</span>
+                            }
                         }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
@@ -166,6 +218,19 @@
         </DxGrid>
     </div>
 </div>
+
+@* Visor del PDF embebido en la misma vista (iframe dentro de un popup; el endpoint responde el
+   PDF inline). No abre pestaña del navegador ni descarga. *@
+<DxPopup @bind-Visible="pdfVisible" HeaderText="@pdfTitulo" Width="min(1100px, 96vw)"
+         Height="90vh" Scrollable="false" CloseOnOutsideClick="true" ShowFooter="false"
+         CssClass="kardex-pdf-popup">
+    <BodyTemplate>
+        @if (!string.IsNullOrWhiteSpace(pdfUrl))
+        {
+            <iframe class="pdf-frame" src="@pdfUrl" title="@pdfTitulo"></iframe>
+        }
+    </BodyTemplate>
+</DxPopup>
 
 @code {
     [Parameter, EditorRequired]
@@ -270,6 +335,35 @@
     }
 
     private void VerKardexCompleto() => Navigation.NavigateTo($"/almacen/kardex?articuloId={ArticuloId}");
+
+    private bool pdfVisible;
+    private string? pdfUrl;
+    private string pdfTitulo = "Kardex";
+
+    /// <summary>
+    /// Muestra el kardex COMPLETO del artículo (con la bodega elegida si la hay) EMBEBIDO en la
+    /// misma vista, dentro de un iframe en un popup — no sólo los 15 del panel. No abre pestaña
+    /// del navegador ni descarga: bajo InteractiveServer un window.open pierde el gesto del
+    /// usuario al pasar por SignalR y el bloqueador de pop-ups lo tapa. El visor del navegador
+    /// aporta imprimir y descargar.
+    /// </summary>
+    private void MostrarPdf()
+    {
+        if (kardex is null)
+        {
+            return;
+        }
+
+        var filtro = new KardexFilterDto
+        {
+            ArticuloId = ArticuloId,
+            BodegaId = bodegaSeleccionada?.Id
+        };
+
+        pdfTitulo = $"Estado de cuenta — {kardex.Codigo} · {kardex.Descripcion}";
+        pdfUrl = KardexClient.GetPdfArticuloUrl(filtro);
+        pdfVisible = true;
+    }
 
     private static string UsuarioTexto(KardexMovimientoDto m)
         => string.IsNullOrWhiteSpace(m.UsuarioCreacion) ? "Usuario no registrado" : m.UsuarioCreacion!;

@@ -1,5 +1,5 @@
 ﻿@page "/mantenimientos/recargo-mora"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Configuracion.View)]
 
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Mantenimientos
@@ -10,7 +10,7 @@
 
 <PageTitle>SIAD - Recargo por mora</PageTitle>
 
-<DxToastProvider Name="RecargoMoraToast" MaxToastCount="4" />
+<DxToastProvider Name="RecargoMoraToast" MaxToastCount="4" StickToViewport="true" />
 
 <div class="mant-page">
 

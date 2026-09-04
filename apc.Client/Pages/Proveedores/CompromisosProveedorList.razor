@@ -1,5 +1,5 @@
 @page "/proveedores/compromisos-proveedor"
-@attribute [Authorize(Policy = AuthorizationPolicies.Contabilidad)]
+@attribute [Authorize(Policy = PermissionNames.Contabilidad.View)]
 
 @using DevExpress.Blazor
 @using Microsoft.AspNetCore.Authorization
@@ -258,6 +258,8 @@
     </div>
 </div>
 
+<PdfPreviewPopup @ref="pdfPopup" />
+
 @code {
     [SupplyParameterFromQuery(Name = "proveedor")]
     public string? ProveedorCodigoQuery { get; set; }
@@ -267,6 +269,7 @@
 
     private readonly OrdenPagoDirectoFilterDto filtro = new();
     private readonly List<OrdenPagoDirectoListItemDto> ordenes = new();
+    private PdfPreviewPopup? pdfPopup;
     private readonly List<ProveedorFiltroItem> proveedoresFiltro = new();
     private string? proveedorQueryActual;
     private bool isLoading;
@@ -380,8 +383,8 @@
         Navigation.NavigateTo(url);
     }
 
-    private async Task ImprimirAsync(int numeroOrden)
-        => await JS.InvokeVoidAsync("open", OrdenesPagoDirectoClient.GetPdfUrl(numeroOrden), "_blank");
+    private void ImprimirAsync(int numeroOrden)
+        => pdfPopup?.Mostrar(OrdenesPagoDirectoClient.GetPdfUrl(numeroOrden), $"Compromiso {numeroOrden}");
 
     private void IrAProcesar(int numeroOrden)
     {

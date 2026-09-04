@@ -1,5 +1,5 @@
 ﻿@page "/clientes"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Ventas.Clientes.View)]
 
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Clientes

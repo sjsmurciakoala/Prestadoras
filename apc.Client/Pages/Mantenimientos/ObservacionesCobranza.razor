@@ -1,5 +1,5 @@
 @page "/mantenimientos/observaciones-cobranza"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Configuracion.View)]
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Cobranza
 @using apc.Client.Services.Facturacion
@@ -9,7 +9,7 @@
 
 <PageTitle>SIAD - Observaciones de Cobranza</PageTitle>
 
-<DxToastProvider Name="ObservacionesToast" MaxToastCount="4" />
+<DxToastProvider Name="ObservacionesToast" MaxToastCount="4" StickToViewport="true" />
 
 <div class="page-container">
     <div class="header-section mb-3">

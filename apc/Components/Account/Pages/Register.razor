@@ -16,30 +16,30 @@
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
 
-<PageTitle>Register</PageTitle>
+<PageTitle>Registrarse</PageTitle>
 
 <div class="main-content">
     <div class="block-content">
         <div class="title">
-            <div class="title-header-text">Register</div>
-            <div class="title-content-text">Create a new Account.</div>
+            <div class="title-header-text">Registrarse</div>
+            <div class="title-content-text">Cree una cuenta nueva.</div>
         </div>
         <StatusMessage Message="@Message" />
         <EditForm Model="@Input" asp-route-returnUrl="@ReturnUrl" method="post" OnValidSubmit="RegisterUser" FormName="register" Context="register">
             <DataAnnotationsValidator />
             <ValidationSummary class="text-danger" role="alert" />
             <DxFormLayout CaptionPosition=@CaptionPosition.Vertical>
-                <DxFormLayoutItem Caption="Email" ColSpanMd="12" BeginRow="true">
+                <DxFormLayoutItem Caption="Correo electrónico" ColSpanMd="12" BeginRow="true">
                     <InteractiveServerTextBox Name="Input.Email" Value="@Input.Email" />
                 </DxFormLayoutItem>
-                <DxFormLayoutItem Caption="Password" ColSpanMd="12" BeginRow="true">
+                <DxFormLayoutItem Caption="Contraseña" ColSpanMd="12" BeginRow="true">
                     <InteractiveServerTextBox Name="Input.Password" Value="@Input.Password" Password="true" />
                 </DxFormLayoutItem>
-                <DxFormLayoutItem Caption="Confirm Password" ColSpanMd="12" BeginRow="true">
+                <DxFormLayoutItem Caption="Confirmar contraseña" ColSpanMd="12" BeginRow="true">
                     <InteractiveServerTextBox Name="Input.ConfirmPassword" Value="@Input.ConfirmPassword" Password="true" />
                 </DxFormLayoutItem>
                 <DxFormLayoutItem ColSpanMd="12" BeginRow="true">
-                    <DxButton CssClass="w-100" SubmitFormOnClick="true" Text="Register"></DxButton>
+                    <DxButton CssClass="w-100" SubmitFormOnClick="true" Text="Registrarse"></DxButton>
                 </DxFormLayoutItem>
             </DxFormLayout>
         </EditForm>
@@ -119,17 +119,17 @@
     private sealed class InputModel {
         [Required]
         [EmailAddress]
-        [Display(Name = "Email")]
+        [Display(Name = "Correo electrónico")]
         public string Email { get; set; } = "";
 
         [Required]
         [StringLength(100, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 6)]
         [DataType(DataType.Password)]
-        [Display(Name = "Password")]
+        [Display(Name = "Contraseña")]
         public string Password { get; set; } = "";
 
         [DataType(DataType.Password)]
-        [Display(Name = "Confirm password")]
+        [Display(Name = "Confirmar contraseña")]
         [Compare("Password", ErrorMessage = "The password and confirmation password do not match.")]
         public string ConfirmPassword { get; set; } = "";
     }

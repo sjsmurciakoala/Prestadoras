@@ -10,7 +10,7 @@ namespace SIAD.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Renombrar columnas de IDs a códigos de cuenta (cuentas de utilidad)
+            // Renombrar columnas de IDs a cÃ³digos de cuenta (cuentas de utilidad)
             migrationBuilder.RenameColumn(
                 name: "cuenta_util_acumulada_historica",
                 table: "con_configuracion_sistema",
@@ -104,7 +104,7 @@ namespace SIAD.Data.Migrations
                 name: "sobrevaluaciones",
                 table: "con_configuracion_sistema");
 
-            // Cambiar tipo de datos: de bigint a varchar(30) para códigos de cuenta
+            // Cambiar tipo de datos: de bigint a varchar(30) para cÃ³digos de cuenta
             migrationBuilder.AlterColumn<string>(
                 name: "codigo_cuenta_util_acumulada_historica",
                 table: "con_configuracion_sistema",
@@ -270,7 +270,7 @@ namespace SIAD.Data.Migrations
                 name: "FK_con_configuracion_sistema_con_plan_cuentas_sobre",
                 table: "con_configuracion_sistema");
 
-            // Eliminar índices antiguos
+            // Eliminar Ã­ndices antiguos
             migrationBuilder.DropIndex(
                 name: "IX_con_configuracion_sistema_cuenta_util_acumulada_historica",
                 table: "con_configuracion_sistema");

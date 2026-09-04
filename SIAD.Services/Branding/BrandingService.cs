@@ -87,7 +87,7 @@ public class BrandingService : IBrandingService
 
         if (logoBytes.Length == 0)
         {
-            throw new ArgumentException("El logo no puede estar vacío.", nameof(logoBytes));
+            throw new ArgumentException("El logo no puede estar vacÃ­o.", nameof(logoBytes));
         }
 
         if (logoBytes.Length > 5 * 1024 * 1024)
@@ -105,7 +105,7 @@ public class BrandingService : IBrandingService
             {
                 company_name = "Mi Empresa",
                 company_short_name = string.Empty,
-                logo_mime = logoMime ?? "image/png",
+                logo_mime = string.IsNullOrWhiteSpace(logoMime) ? "image/png" : logoMime,
                 logo_bytes = logoBytes,
                 updated_at = DateTime.UtcNow
             };
@@ -114,7 +114,7 @@ public class BrandingService : IBrandingService
         else
         {
             branding.logo_bytes = logoBytes;
-            branding.logo_mime = logoMime ?? "image/png";
+            branding.logo_mime = string.IsNullOrWhiteSpace(logoMime) ? "image/png" : logoMime;
             branding.updated_at = DateTime.UtcNow;
         }
 

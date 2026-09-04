@@ -1,6 +1,6 @@
 @page "/proveedores/compromisos-proveedor/nuevo"
 @page "/proveedores/compromisos-proveedor/{NumeroOrden:int}/editar"
-@attribute [Authorize(Policy = AuthorizationPolicies.Contabilidad)]
+@attribute [Authorize(Policy = PermissionNames.Contabilidad.View)]
 
 @using DevExpress.Blazor
 @using Microsoft.AspNetCore.Authorization
@@ -26,7 +26,7 @@
 <PageTitle>SIAD - Compromiso</PageTitle>
 
 <div class="page-container">
-    <DxToastProvider Name="CompromisoProveedorEditToast" MaxToastCount="4" />
+    <DxToastProvider Name="CompromisoProveedorEditToast" MaxToastCount="4" StickToViewport="true" />
     <ErrorNotice @ref="errorNotice" />
 
     <div class="d-flex justify-content-between align-items-center mb-4 header-section">
@@ -553,6 +553,8 @@
     </div>
 </div>
 
+<PdfPreviewPopup @ref="pdfPopup" />
+
 @code {
     [Parameter]
     public int NumeroOrden { get; set; }
@@ -590,6 +592,7 @@
     private bool cuentaContableProveedorBloqueada;
     private bool mostrarPreviaPartida;
     private ErrorNotice errorNotice = default!;
+    private PdfPreviewPopup? pdfPopup;
 
     private bool IsEdit => NumeroOrden > 0;
     private bool TienePartidaContableRegistrada => ordenDetalle?.PartidaContable is not null;
@@ -987,8 +990,8 @@
         }
     }
 
-    private async Task ImprimirAsync()
-        => await JS.InvokeVoidAsync("open", OrdenesPagoDirectoClient.GetPdfUrl(NumeroOrden), "_blank");
+    private void ImprimirAsync()
+        => pdfPopup?.Mostrar(OrdenesPagoDirectoClient.GetPdfUrl(NumeroOrden), $"Compromiso {NumeroOrden}");
 
     private void TogglePreviaPartida() => mostrarPreviaPartida = !mostrarPreviaPartida;
 

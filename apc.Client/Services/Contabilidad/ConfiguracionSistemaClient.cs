@@ -14,7 +14,7 @@ public sealed class ConfiguracionSistemaClient
     }
 
     /// <summary>
-    /// Obtiene la configuración actual de una empresa
+    /// Obtiene la configuraciÃ³n actual de una empresa
     /// </summary>
     public async Task<ConfiguracionSistemaDto?> ObtenerAsync(long companyId, CancellationToken ct = default)
     {
@@ -34,7 +34,7 @@ public sealed class ConfiguracionSistemaClient
                 var mensaje = await ObtenerMensajeErrorAsync(response, ct);
                 throw new HttpRequestException(
                     string.IsNullOrWhiteSpace(mensaje)
-                        ? "No fue posible obtener la configuración."
+                        ? "No fue posible obtener la configuraciÃ³n."
                         : mensaje);
             }
 
@@ -47,12 +47,12 @@ public sealed class ConfiguracionSistemaClient
         }
         catch (Exception ex)
         {
-            throw new InvalidOperationException("Error al obtener la configuración del servidor.", ex);
+            throw new InvalidOperationException("Error al obtener la configuraciÃ³n del servidor.", ex);
         }
     }
 
     /// <summary>
-    /// Guarda la configuración completa de una empresa y valida que se guardó correctamente
+    /// Guarda la configuraciÃ³n completa de una empresa y valida que se guardÃ³ correctamente
     /// </summary>
     public async Task<ConfiguracionSistemaDto> GuardarAsync(long companyId, ConfiguracionSistemaDto dto, CancellationToken ct = default)
     {
@@ -74,14 +74,14 @@ public sealed class ConfiguracionSistemaClient
                 var mensaje = await ObtenerMensajeErrorAsync(response, ct);
                 throw new HttpRequestException(
                     string.IsNullOrWhiteSpace(mensaje)
-                        ? "No fue posible guardar la configuración."
+                        ? "No fue posible guardar la configuraciÃ³n."
                         : mensaje);
             }
 
             var resultado = await response.Content.ReadFromJsonAsync<ConfiguracionSistemaDto>(cancellationToken: ct);
             if (resultado is null)
             {
-                throw new InvalidOperationException("El servidor devolvió una respuesta vacía.");
+                throw new InvalidOperationException("El servidor devolviÃ³ una respuesta vacÃ­a.");
             }
 
             // Validar que los datos se guardaron correctamente
@@ -95,7 +95,7 @@ public sealed class ConfiguracionSistemaClient
         }
         catch (Exception ex)
         {
-            throw new InvalidOperationException("Error al guardar la configuración.", ex);
+            throw new InvalidOperationException("Error al guardar la configuraciÃ³n.", ex);
         }
     }
 
@@ -234,7 +234,7 @@ public sealed class ConfiguracionSistemaClient
     }
 
     /// <summary>
-    /// Especifica un DateTime como UTC, evitando ambigüedades
+    /// Especifica un DateTime como UTC, evitando ambigÃ¼edades
     /// </summary>
     private static DateTime EspecificarComoUtc(DateTime dateTime)
     {
@@ -244,15 +244,15 @@ public sealed class ConfiguracionSistemaClient
     }
 
     /// <summary>
-    /// Valida que la configuración se guardó correctamente comparando valores
+    /// Valida que la configuraciÃ³n se guardÃ³ correctamente comparando valores
     /// </summary>
     private static void ValidarConfiguracionGuardada(ConfiguracionSistemaDto original, ConfiguracionSistemaDto guardada)
     {
         var errores = new List<string>();
 
-        // Validar configuración principal
+        // Validar configuraciÃ³n principal
         if (original.Principal.SeparadorCodigo != guardada.Principal.SeparadorCodigo)
-            errores.Add("El separador de código no coincide");
+            errores.Add("El separador de cÃ³digo no coincide");
         
         if (original.Principal.FormatoCuentas != guardada.Principal.FormatoCuentas)
             errores.Add("El formato de cuentas no coincide");
@@ -261,12 +261,12 @@ public sealed class ConfiguracionSistemaClient
             errores.Add("El formato de centros no coincide");
         
         if (original.Principal.MontoMaximo != guardada.Principal.MontoMaximo)
-            errores.Add("El monto máximo no coincide");
+            errores.Add("El monto mÃ¡ximo no coincide");
         
         if (original.Principal.FrecuenciaDepreciacion != guardada.Principal.FrecuenciaDepreciacion)
-            errores.Add("La frecuencia de depreciación no coincide");
+            errores.Add("La frecuencia de depreciaciÃ³n no coincide");
 
-        // Validar fechas (convertir a UTC para comparación)
+        // Validar fechas (convertir a UTC para comparaciÃ³n)
         var fechaInicioOriginal = original.Principal.FechaInicioEjercicio?.ToUniversalTime();
         var fechaInicioGuardada = guardada.Principal.FechaInicioEjercicio?.ToUniversalTime();
         
@@ -282,7 +282,7 @@ public sealed class ConfiguracionSistemaClient
         if (errores.Count > 0)
         {
             throw new InvalidOperationException(
-                $"Validación fallida después de guardar. Errores: {string.Join("; ", errores)}");
+                $"ValidaciÃ³n fallida despuÃ©s de guardar. Errores: {string.Join("; ", errores)}");
         }
     }
 }

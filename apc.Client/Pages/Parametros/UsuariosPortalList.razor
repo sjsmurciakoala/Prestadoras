@@ -7,6 +7,7 @@
 @inject UsuariosPortalClient UsuariosClient
 @inject NavigationManager NavigationManager
 @inject IToastNotificationService ToastService
+@inject IJSRuntime JS
 
 <PageTitle>SIAD - Usuarios</PageTitle>
 
@@ -82,17 +83,128 @@ else
                     }
                 </CellDisplayTemplate>
             </DxGridDataColumn>
-            <DxGridDataColumn FieldName="Id" Caption="" Width="100px" AllowSort="false" AllowGroup="false">
+            <DxGridDataColumn FieldName="Id" Caption="Acciones" Width="150px" AllowSort="false" AllowGroup="false">
                 <CellDisplayTemplate>
-                    <DxButton Text="Editar"
-                              RenderStyle="ButtonRenderStyle.Link"
-                              IconCssClass="bi bi-pencil"
-                              Click="@(() => NavigationManager.NavigateTo($"/parametros/usuarios/editar/{context.Value}"))" />
+                    @{
+                        var fila = (UsuarioPortalDto)context.DataItem;
+                    }
+                    <div class="d-flex gap-1">
+                        <DxButton RenderStyle="ButtonRenderStyle.Link"
+                                  IconCssClass="bi bi-pencil"
+                                  Attributes="@(new Dictionary<string, object> { ["title"] = "Editar" })"
+                                  Click="@(() => NavigationManager.NavigateTo($"/parametros/usuarios/editar/{fila.Id}"))" />
+                        <DxButton RenderStyle="ButtonRenderStyle.Link"
+                                  IconCssClass="bi bi-key"
+                                  Attributes="@(new Dictionary<string, object> { ["title"] = "Restablecer contraseña" })"
+                                  Click="@(() => AbrirRestablecer(fila))" />
+                        <DxButton RenderStyle="ButtonRenderStyle.Link"
+                                  CssClass="text-danger"
+                                  IconCssClass="bi bi-trash"
+                                  Attributes="@(new Dictionary<string, object> { ["title"] = "Eliminar" })"
+                                  Click="@(() => AbrirEliminar(fila))" />
+                    </div>
                 </CellDisplayTemplate>
             </DxGridDataColumn>
         </Columns>
     </DxGrid>
 }
+
+
+<DxPopup @bind-Visible="restablecerVisible" Width="min(460px, 92vw)" HeaderText="Restablecer contraseña" ShowFooter="false">
+    <BodyTemplate>
+        <div class="p-3">
+            <p class="mb-2">
+                Se asignará una contraseña nueva a <strong>@(usuarioSeleccionado?.Email)</strong>.
+            </p>
+            <p class="text-muted small mb-3">
+                Sus sesiones abiertas se cerrarán y deberá entrar con la contraseña nueva.
+                Si estaba bloqueado por intentos fallidos, se desbloquea.
+            </p>
+
+            <label class="form-label mb-1">Contraseña</label>
+            <DxTextBox @bind-Text="passwordManual"
+                       Password="true"
+                       NullText="Dejar vacío para generarla automáticamente"
+                       CssClass="w-100" />
+            <div class="form-text mt-1">
+                Si la escribes tú, debe tener al menos 6 caracteres con mayúscula, minúscula,
+                número y símbolo.
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 mt-4">
+                <DxButton Text="Cancelar"
+                          Click="CancelarRestablecer"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Enabled="@(!isResetting)" />
+                <DxButton Text="Restablecer"
+                          Click="RestablecerConfirmadoAsync"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          IconCssClass="bi bi-key"
+                          Enabled="@(!isResetting)" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="resultadoVisible" Width="min(480px, 92vw)" HeaderText="Contraseña restablecida" ShowFooter="false">
+    <BodyTemplate>
+        <div class="p-3">
+            <div class="alert alert-warning d-flex align-items-start gap-2" role="alert">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                <div>
+                    Cópiala ahora: <strong>no se puede volver a consultar</strong>.
+                    El sistema solo guarda su huella cifrada.
+                </div>
+            </div>
+
+            <div class="mb-2 text-muted small">Usuario</div>
+            <div class="mb-3 fw-semibold">@(resultado?.Email)</div>
+
+            <div class="mb-2 text-muted small">Contraseña temporal</div>
+            <div class="d-flex align-items-center gap-2">
+                <code class="flex-grow-1 p-2 bg-light border rounded user-select-all fs-5">@(resultado?.Password)</code>
+                <DxButton RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          IconCssClass="bi bi-clipboard"
+                          Text="@TextoBotonCopiar"
+                          Click="CopiarPasswordAsync" />
+            </div>
+
+            <div class="d-flex justify-content-end mt-4">
+                <DxButton Text="Listo"
+                          Click="CerrarResultado"
+                          RenderStyle="ButtonRenderStyle.Primary" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="eliminarVisible" Width="min(440px, 90vw)" HeaderText="Confirmar acción" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-danger"><i class="bi bi-trash-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">¿Eliminar el usuario?</h5>
+            <p class="text-muted mb-2">
+                Esta acción <strong>no se puede deshacer</strong>. Si solo quieres impedirle el acceso,
+                edítalo y márcalo como bloqueado.
+            </p>
+            <div class="fw-semibold">@(usuarioSeleccionado?.Email)</div>
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar"
+                          Click="CancelarEliminar"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Enabled="@(!isDeleting)" />
+                <DxButton Text="Sí, eliminar"
+                          Click="EliminarConfirmadoAsync"
+                          RenderStyle="ButtonRenderStyle.Danger"
+                          IconCssClass="bi bi-trash"
+                          Enabled="@(!isDeleting)" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
 
 @code {
     private List<UsuarioPortalDto> usuarios = [];
@@ -142,6 +254,137 @@ else
         finally
         {
             isSyncing = false;
+        }
+    }
+
+    // --- Restablecer contraseña ---
+
+    private UsuarioPortalDto? usuarioSeleccionado;
+    private bool restablecerVisible;
+    private bool resultadoVisible;
+    private bool isResetting;
+    private string? passwordManual;
+    private RestablecerPasswordResultadoDto? resultado;
+    private bool copiada;
+
+    private string TextoBotonCopiar => copiada ? "Copiada" : "Copiar";
+
+    private void AbrirRestablecer(UsuarioPortalDto usuario)
+    {
+        usuarioSeleccionado = usuario;
+        passwordManual = null;
+        restablecerVisible = true;
+    }
+
+    private void CancelarRestablecer()
+    {
+        restablecerVisible = false;
+        passwordManual = null;
+    }
+
+    private void CerrarResultado()
+    {
+        resultadoVisible = false;
+        // La contraseña no se conserva en memoria más allá del popup.
+        resultado = null;
+    }
+
+    private async Task RestablecerConfirmadoAsync()
+    {
+        if (usuarioSeleccionado is null)
+        {
+            return;
+        }
+
+        isResetting = true;
+
+        try
+        {
+            resultado = await UsuariosClient.RestablecerPasswordAsync(
+                usuarioSeleccionado.Id,
+                string.IsNullOrWhiteSpace(passwordManual) ? null : passwordManual);
+
+            copiada = false;
+            passwordManual = null;
+            restablecerVisible = false;
+            resultadoVisible = true;
+
+            // El restablecimiento desbloquea al usuario: la grilla debe reflejarlo.
+            await CargarUsuariosAsync();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            NavigationManager.NavigateTo("/Account/Login");
+        }
+        catch (HttpRequestException ex)
+        {
+            ToastService.ShowToast(new ToastOptions { Title = "Restablecer contraseña", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
+        }
+        finally
+        {
+            isResetting = false;
+        }
+    }
+
+    private async Task CopiarPasswordAsync()
+    {
+        if (resultado is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", resultado.Password);
+            copiada = true;
+        }
+        catch (JSException)
+        {
+            // Sin permiso de portapapeles (o sitio servido por HTTP sin TLS): la contraseña
+            // sigue visible y seleccionable en pantalla, no hace falta molestar con un error.
+        }
+    }
+
+    // --- Eliminar ---
+
+    private bool eliminarVisible;
+    private bool isDeleting;
+
+    private void AbrirEliminar(UsuarioPortalDto usuario)
+    {
+        usuarioSeleccionado = usuario;
+        eliminarVisible = true;
+    }
+
+    private void CancelarEliminar() => eliminarVisible = false;
+
+    private async Task EliminarConfirmadoAsync()
+    {
+        if (usuarioSeleccionado is null)
+        {
+            return;
+        }
+
+        isDeleting = true;
+
+        try
+        {
+            await UsuariosClient.EliminarAsync(usuarioSeleccionado.Id);
+            eliminarVisible = false;
+            ToastService.ShowToast(new ToastOptions { Title = "Usuarios", Text = "Usuario eliminado correctamente.", RenderStyle = ToastRenderStyle.Success });
+            await CargarUsuariosAsync();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            NavigationManager.NavigateTo("/Account/Login");
+        }
+        catch (HttpRequestException ex)
+        {
+            ToastService.ShowToast(new ToastOptions { Title = "Usuarios", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
+        }
+        finally
+        {
+            isDeleting = false;
         }
     }
 }

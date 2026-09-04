@@ -1,5 +1,5 @@
 @page "/proveedores/compromisos-proveedor/{NumeroOrden:int}/procesar"
-@attribute [Authorize(Policy = AuthorizationPolicies.Contabilidad)]
+@attribute [Authorize(Policy = PermissionNames.Contabilidad.View)]
 
 @using DevExpress.Blazor
 @using Microsoft.AspNetCore.Authorization
@@ -9,6 +9,8 @@
 @using SIAD.Core.DTOs.Bancos
 @using SIAD.Core.DTOs.Contabilidad
 @using SIAD.Core.DTOs.Presupuesto
+@using SIAD.Core.DTOs.Retenciones
+@using SIAD.Core.Retenciones
 @using apc.Client.Services.Bancos
 @using apc.Client.Services.Contabilidad
 @using apc.Client.Services.Presupuesto
@@ -28,7 +30,7 @@
 <PageTitle>SIAD - Procesar Compromiso</PageTitle>
 
 <div class="page-container">
-    <DxToastProvider Name="CompromisoProveedorProcesarToast" MaxToastCount="4" />
+    <DxToastProvider Name="CompromisoProveedorProcesarToast" MaxToastCount="4" StickToViewport="true" />
     <ErrorNotice @ref="errorNotice" />
 
     <div class="d-flex justify-content-between align-items-center mb-4 header-section">
@@ -414,7 +416,37 @@
                         <div style="font-size:0.8rem; font-weight:700; color:#44525e; margin-bottom:0.6rem;">
                             @(editorIndex is null ? "Agregar linea" : "Editar linea")
                         </div>
+
+                        @* Modo: Retencion (resta; autocompleta desde el catalogo) vs Cargo (suma; manual). *@
+                        <div style="display:flex; gap:0.4rem; margin-bottom:0.6rem;">
+                            <button type="button" style="@SegBtnStyle(DeduccionTipo.Retencion)" @onclick="@(() => SetEditorTipo(DeduccionTipo.Retencion))">Retencion</button>
+                            <button type="button" style="@SegBtnStyle(DeduccionTipo.Cargo)" @onclick="@(() => SetEditorTipo(DeduccionTipo.Cargo))">Cargo</button>
+                        </div>
+
+                        @if (editorTipo == DeduccionTipo.Retencion)
+                        {
+                            <div class="mb-2">
+                                <label style="font-size:0.72rem; color:#7f8c8d; display:block; margin-bottom:0.15rem;">Tipo de retencion</label>
+                                <DxComboBox Data="@retencionesAplicables"
+                                            TData="RetencionAplicableDto"
+                                            TValue="int?"
+                                            Value="@editorRetencionId"
+                                            ValueChanged="@((int? v) => OnRetencionTipoChanged(v))"
+                                            ValueFieldName="@nameof(RetencionAplicableDto.RetencionId)"
+                                            TextFieldName="@nameof(RetencionAplicableDto.Display)"
+                                            NullText="Elija un tipo (o capture la linea a mano)"
+                                            SearchMode="ListSearchMode.AutoSearch"
+                                            SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                            SearchDelay="200"
+                                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                            ValidationEnabled="false"
+                                            SizeMode="SizeMode.Small"
+                                            CssClass="w-100" />
+                            </div>
+                        }
+
                         <div class="mb-2">
+                            <label style="font-size:0.72rem; color:#7f8c8d; display:block; margin-bottom:0.15rem;">Cuenta contable</label>
                             <DxComboBox Data="@cuentasContables"
                                         TData="CuentaContableLookupDto"
                                         TValue="long?"
@@ -436,12 +468,24 @@
                                        SizeMode="SizeMode.Small"
                                        CssClass="w-100" />
                         </div>
+
                         <div style="display:flex; gap:0.6rem; align-items:flex-start;">
-                            <div style="display:flex; gap:0.4rem; flex:1;">
-                                <button type="button" style="@SegBtnStyle(DeduccionTipo.Retencion)" @onclick="@(() => editorTipo = DeduccionTipo.Retencion)">Retencion</button>
-                                <button type="button" style="@SegBtnStyle(DeduccionTipo.Cargo)" @onclick="@(() => editorTipo = DeduccionTipo.Cargo)">Cargo</button>
-                            </div>
+                            @if (editorTipo == DeduccionTipo.Retencion)
+                            {
+                                <div style="flex:1;">
+                                    <label style="font-size:0.72rem; color:#7f8c8d; display:block; margin-bottom:0.15rem;">Base imponible</label>
+                                    <DxSpinEdit T="decimal"
+                                                Value="@editorBase"
+                                                ValueChanged="@((decimal v) => OnEditorBaseChanged(v))"
+                                                MinValue="0"
+                                                Increment="0.01m"
+                                                DisplayFormat="N2"
+                                                SizeMode="SizeMode.Small"
+                                                CssClass="w-100" />
+                                </div>
+                            }
                             <div style="flex:1;">
+                                <label style="font-size:0.72rem; color:#7f8c8d; display:block; margin-bottom:0.15rem;">@(editorTipo == DeduccionTipo.Retencion ? "Monto a retener" : "Monto del cargo")</label>
                                 <DxSpinEdit T="decimal"
                                             @bind-Value="editorMonto"
                                             MinValue="0"
@@ -451,6 +495,14 @@
                                             CssClass="w-100" />
                             </div>
                         </div>
+
+                        @if (!string.IsNullOrEmpty(editorRetencionAviso))
+                        {
+                            <div style="font-size:0.78rem; color:#8a6d3b; background:#fcf8e3; border:1px solid #faebcc; border-radius:6px; padding:0.4rem 0.55rem; margin-top:0.5rem;">
+                                <i class="bi bi-exclamation-triangle me-1"></i>@editorRetencionAviso
+                            </div>
+                        }
+
                         <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap; margin-top:0.6rem;">
                             <div style="font-size:0.72rem; color:#7f8c8d;">Retencion resta al pago &middot; Cargo lo suma</div>
                             <div style="display:flex; gap:0.5rem;">
@@ -587,6 +639,15 @@
     private decimal editorMonto;
     private int? editorIndex;
     private string? editorError;
+
+    // F2: catalogo de retenciones aplicable a la fecha del compromiso (concepto + % vigente + cuenta por
+    // empresa) y la tasa ISV general vigente para la base SIN_ISV. La UI solo orquesta; la aritmetica vive
+    // en RetencionCalculator (SIAD.Core, puro y testeado).
+    private readonly List<RetencionAplicableDto> retencionesAplicables = new();
+    private decimal? tasaIsvGeneral;
+    private int? editorRetencionId;        // tipo de retencion elegido en el editor (null = linea manual)
+    private decimal editorBase;            // base imponible editable (modo Retencion)
+    private string? editorRetencionAviso;  // aviso del autocalculo: sin tasa / sin cuenta / sin ISV vigente
 
     private OrdenPagoDirectoDetalleDto? ordenDetalle;
     private long? cuentaProveedorId;
@@ -878,6 +939,9 @@
             }
 
             cuentaProveedorId = ResolveCuentaProveedorId(ordenDetalle.CuentaContableProveedor);
+
+            // Retenciones vigentes a la FECHA DEL COMPROMISO (no "hoy"): el % que regia en esa fecha.
+            await CargarRetencionesAplicablesAsync();
         }
         catch (Exception ex)
         {
@@ -920,6 +984,115 @@
         editorTipo = DeduccionTipo.Retencion;
         editorMonto = 0m;
         editorError = null;
+        editorRetencionId = null;
+        editorBase = 0m;
+        editorRetencionAviso = null;
+    }
+
+    private async Task CargarRetencionesAplicablesAsync()
+    {
+        retencionesAplicables.Clear();
+        tasaIsvGeneral = null;
+        try
+        {
+            var fecha = ordenDetalle?.FechaCompromiso is { } f
+                ? DateOnly.FromDateTime(f)
+                : DateOnly.FromDateTime(DateTime.Today);
+            var aplicables = await OrdenesPagoDirectoClient.GetRetencionesAplicablesAsync(fecha);
+            retencionesAplicables.AddRange(aplicables.Retenciones);
+            tasaIsvGeneral = aplicables.TasaIsvGeneral;
+        }
+        catch (Exception ex)
+        {
+            // No es fatal: el popup sigue permitiendo la linea manual (cuenta + monto a mano).
+            Logger.LogWarning(ex, "No se pudieron cargar las retenciones aplicables del compromiso {NumeroOrden}", NumeroOrden);
+        }
+    }
+
+    // Cambiar de modo. Cargo = manual (sin catalogo): se limpia el tipo de retencion y su aviso.
+    private void SetEditorTipo(DeduccionTipo tipo)
+    {
+        editorTipo = tipo;
+        if (tipo == DeduccionTipo.Cargo)
+        {
+            editorRetencionId = null;
+            editorRetencionAviso = null;
+        }
+    }
+
+    // Al elegir un tipo de retencion: fija cuenta (o avisa), propone base (editable) y monto (si hay tasa),
+    // y arma la descripcion. NUNCA inventa % — sin tasa vigente avisa y deja el monto en manos del usuario.
+    private void OnRetencionTipoChanged(int? retencionId)
+    {
+        editorRetencionId = retencionId;
+        editorError = null;
+        editorRetencionAviso = null;
+
+        if (retencionId is null)
+        {
+            return; // volvio a "sin tipo": linea manual, no se pisa lo ya escrito
+        }
+
+        var ret = retencionesAplicables.FirstOrDefault(r => r.RetencionId == retencionId.Value);
+        if (ret is null)
+        {
+            return;
+        }
+
+        var avisos = new List<string>();
+
+        // 1) Cuenta desde prv_retencion_cuenta. Si la empresa no la configuro, avisar y NO autocompletar.
+        if (ret.CuentaConfigurada && ret.CuentaAccountId is { } accId)
+        {
+            editorCuentaId = accId;
+        }
+        else
+        {
+            editorCuentaId = null;
+            avisos.Add("La empresa no tiene una cuenta configurada para esta retencion: seleccionela abajo o configurela en el mantenimiento de retenciones.");
+        }
+
+        // 2) Base segun base_calculo (editable). Aviso explicito si SIN_ISV y no hay tasa ISV vigente.
+        var calculo = RetencionCalculator.Calcular(Bruto, ret.BaseCalculo, ret.Porcentaje, tasaIsvGeneral);
+        editorBase = calculo.Base;
+
+        if (RetencionCalculator.RequiereTasaIsvYNoHay(ret.BaseCalculo, tasaIsvGeneral))
+        {
+            avisos.Add("No se encontro una tasa de ISV vigente: la base no se redujo (quedo igual al bruto). Revise el monto o ajuste la base a mano.");
+        }
+
+        // 3) Monto: solo si hay tasa vigente. Sin tasa (p. ej. ISV-RET) se captura a mano.
+        if (calculo.PuedeCalcularMonto)
+        {
+            editorMonto = calculo.Monto;
+        }
+        else
+        {
+            editorMonto = 0m;
+            avisos.Add("Esta retencion no tiene una tasa vigente (pendiente de confirmar con la SAR): capture el monto a mano; no se puede autocalcular.");
+        }
+
+        // 4) Descripcion: nombre + % (o solo nombre si no hay tasa).
+        editorDescripcion = ret.Porcentaje is { } pct
+            ? $"{ret.Nombre} ({pct:0.##}%)"
+            : ret.Nombre;
+
+        editorRetencionAviso = avisos.Count > 0 ? string.Join(" ", avisos) : null;
+    }
+
+    // Al editar la base a mano, el monto sigue a la base cuando hay un tipo con tasa seleccionado.
+    private void OnEditorBaseChanged(decimal value)
+    {
+        editorBase = value < 0m ? 0m : value;
+
+        var ret = editorRetencionId is { } id
+            ? retencionesAplicables.FirstOrDefault(r => r.RetencionId == id)
+            : null;
+
+        if (ret?.Porcentaje is not null)
+        {
+            editorMonto = RetencionCalculator.MontoDesdeBase(editorBase, ret.Porcentaje);
+        }
     }
 
     private void GuardarLineaEditor()
@@ -938,12 +1111,21 @@
             return;
         }
 
+        // F4: si es una retencion catalogada, conservar el vinculo (retencion_id/%/base) para armar
+        // dto.Retenciones al enviar. No cambia el contrato de la partida (Debe/Haber por linea).
+        var retCatalogo = editorTipo == DeduccionTipo.Retencion && editorRetencionId is { } rid
+            ? retencionesAplicables.FirstOrDefault(r => r.RetencionId == rid)
+            : null;
+
         var linea = new DeduccionLinea
         {
             CuentaId = editorCuentaId,
             Descripcion = editorDescripcion?.Trim() ?? string.Empty,
             Tipo = editorTipo,
             Monto = editorMonto,
+            RetencionId = retCatalogo?.RetencionId,
+            Porcentaje = retCatalogo?.Porcentaje,
+            Base = editorTipo == DeduccionTipo.Retencion ? editorBase : 0m,
         };
 
         if (editorIndex is int idx && idx >= 0 && idx < deduccionesDraft.Count)
@@ -972,6 +1154,11 @@
         editorTipo = d.Tipo;
         editorMonto = d.Monto;
         editorError = null;
+        // F4: las lineas confirmadas ahora guardan el vinculo al catalogo; al editar se restaura para no
+        // perder la trazabilidad estructurada (retencion_id/%/base).
+        editorRetencionId = d.RetencionId;
+        editorBase = d.Base;
+        editorRetencionAviso = null;
     }
 
     private void QuitarLineaDraft(int idx)
@@ -1061,6 +1248,23 @@
                     Descripcion = string.IsNullOrWhiteSpace(deduccion.Descripcion) ? ordenDetalle.Concepto : deduccion.Descripcion.Trim(),
                     Debito = deduccion.Debe,
                     Credito = deduccion.Haber
+                });
+            }
+
+            // F4: retenciones catalogadas en paralelo a las lineas (mismo dato, no altera la partida).
+            // El backend escribe el registro fiscal hdr/dtl y valida Σ Monto == Σ credito de estas cuentas.
+            foreach (var deduccion in deducciones)
+            {
+                if (deduccion.Tipo != DeduccionTipo.Retencion || deduccion.RetencionId is not { } retId)
+                    continue;
+
+                dto.Retenciones.Add(new RetencionAplicadaDto
+                {
+                    RetencionId = retId,
+                    CuentaId = deduccion.CuentaId ?? 0,
+                    Base = deduccion.Base,
+                    Porcentaje = deduccion.Porcentaje ?? 0m,
+                    Monto = deduccion.Monto
                 });
             }
 
@@ -1381,6 +1585,12 @@
         public DeduccionTipo Tipo { get; set; } = DeduccionTipo.Retencion;
         public decimal Monto { get; set; }
 
+        // F4: vinculo al catalogo para armar dto.Retenciones (registro fiscal hdr/dtl), sin alterar el
+        // contrato de la partida (Debe/Haber). Null en lineas manuales (no catalogadas).
+        public int? RetencionId { get; set; }
+        public decimal? Porcentaje { get; set; }
+        public decimal Base { get; set; }
+
         // Derivados para armar la partida y el DTO sin cambiar su contrato (Debe/Haber por linea).
         public decimal Debe => Tipo == DeduccionTipo.Cargo ? Monto : 0m;
         public decimal Haber => Tipo == DeduccionTipo.Retencion ? Monto : 0m;
@@ -1391,6 +1601,9 @@
             Descripcion = Descripcion,
             Tipo = Tipo,
             Monto = Monto,
+            RetencionId = RetencionId,
+            Porcentaje = Porcentaje,
+            Base = Base,
         };
     }
 }

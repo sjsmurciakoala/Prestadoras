@@ -3,7 +3,7 @@
    la configuración de cuentas de abonos vive en la matriz de integración.
    Se mantiene la ruta como redirección para marcadores/enlaces existentes. *@
 @page "/contabilidad/cuentas-abonos"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Contabilidad.View)]
 @inject NavigationManager Navigation
 
 <PageTitle>SIAD - Configuración de Integración Contable</PageTitle>

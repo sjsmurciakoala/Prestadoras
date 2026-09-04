@@ -1,7 +1,8 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using apc.Data;
+using SIAD.Core.Constants;
 
 namespace apc.Controllers
 {
@@ -11,6 +12,9 @@ namespace apc.Controllers
     /// </summary>
     [ApiController]
     [Route("api/[controller]")]
+    // Expone usuarios y todos sus claims: además de estar limitado a Development,
+    // exige Super Administrador.
+    [Authorize(Policy = AuthorizationPolicies.SuperAdmin)]
     public class DiagnosticoController : ControllerBase
     {
         private readonly UserManager<ApplicationUser> _userManager;

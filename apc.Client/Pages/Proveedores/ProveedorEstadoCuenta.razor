@@ -1,0 +1,93 @@
+@page "/proveedores/{codigo}/estado-cuenta"
+@attribute [Authorize(Policy = PermissionNames.Proveedores.View)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Proveedores
+@using apc.Client.Pages.Proveedores.Components
+@using apc.Client.Services.Contabilidad
+
+@inject NavigationManager Navigation
+@inject AccountFormatState AccountFormat
+
+<PageTitle>SIAD - Estado de cuenta del proveedor</PageTitle>
+
+<div class="page-container">
+
+    <div class="header-section">
+        <div class="d-flex align-items-center gap-3">
+            <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center form-icon">
+                <i class="bi bi-journal-text"></i>
+            </div>
+            <div>
+                <h2 class="page-title">Estado de cuenta</h2>
+                <p class="page-subtitle">
+                    @if (estado is not null)
+                    {
+                        <span class="fw-semibold">@estado.Codigo</span>
+                        <span> — @estado.Nombre</span>
+                        @if (!string.IsNullOrWhiteSpace(estado.Rtn))
+                        {
+                            <span class="text-muted"> · RTN @estado.Rtn</span>
+                        }
+                        <span class="text-muted"> · corte al @estado.Corte.ToString("dd/MM/yyyy")</span>
+                    }
+                    else
+                    {
+                        <span>Documentos por pagar y movimientos del proveedor</span>
+                    }
+                </p>
+            </div>
+        </div>
+
+        <DxButton Text="Regresar" IconCssClass="bi bi-arrow-left"
+                  RenderStyle="ButtonRenderStyle.Secondary" CssClass="btn-modern" Click="Regresar" />
+    </div>
+
+    @if (estado is not null)
+    {
+        <div class="modern-card mb-3 identidad-card">
+            <div class="dato">
+                <div class="dato-label">Tipo</div>
+                <div class="dato-valor">@(string.IsNullOrWhiteSpace(estado.TipoNombre) ? "—" : estado.TipoNombre)</div>
+            </div>
+            <div class="dato">
+                <div class="dato-label">Cuenta contable</div>
+                @* Mismo formato que el detalle del proveedor (formato_cuentas de la empresa). *@
+                <div class="dato-valor font-monospace">@(string.IsNullOrWhiteSpace(estado.CuentaContable) ? "—" : AccountFormat.Format(estado.CuentaContable))</div>
+            </div>
+            <div class="dato">
+                <div class="dato-label">Estado</div>
+                <div class="dato-valor">
+                    <span class="badge-status @(estado.Activo ? "active" : "inactive")">
+                        @(estado.Activo ? "Activo" : "Inactivo")
+                    </span>
+                </div>
+            </div>
+        </div>
+    }
+
+    <ProveedorEstadoCuentaTab Codigo="@Codigo" OnResumenCargado="OnResumenCargado" />
+
+</div>
+
+@code {
+    [Parameter]
+    public string Codigo { get; set; } = string.Empty;
+
+    /// <summary>De dónde se entró, para que "Regresar" devuelva al maestro o al detalle.</summary>
+    [Parameter, SupplyParameterFromQuery(Name = "originUrl")]
+    public string? OriginUrl { get; set; }
+
+    private ProveedorEstadoCuentaDto? estado;
+
+    protected override async Task OnInitializedAsync() => await AccountFormat.EnsureLoadedAsync();
+
+    private void OnResumenCargado(ProveedorEstadoCuentaDto? resumen)
+    {
+        estado = resumen;
+        StateHasChanged();
+    }
+
+    private void Regresar()
+        => Navigation.NavigateTo(string.IsNullOrWhiteSpace(OriginUrl) ? "/proveedores" : OriginUrl);
+}

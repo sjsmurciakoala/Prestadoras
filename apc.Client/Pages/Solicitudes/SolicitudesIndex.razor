@@ -1,5 +1,5 @@
 ﻿@page "/solicitudes"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Ventas.View)]
 @using SIAD.Core.DTOs.Solicitudes
 @using apc.Client.Services
 @using apc.Client.Services.Solicitudes

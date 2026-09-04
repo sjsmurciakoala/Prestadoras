@@ -1,5 +1,5 @@
 @page "/almacen/compras"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Compras.View)]
 
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Almacen

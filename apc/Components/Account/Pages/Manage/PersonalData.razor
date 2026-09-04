@@ -2,24 +2,24 @@
 
 @inject IdentityUserAccessor UserAccessor
 
-<PageTitle>Personal Data</PageTitle>
+<PageTitle>Datos personales</PageTitle>
 
 <StatusMessage />
 <div class="title title-secondary">
-    <div class="title-content-text-secondary">Personal Data</div>
+    <div class="title-content-text-secondary">Datos personales</div>
 </div>
-<div>Your account contains personal data that you have given us. This page allows you to download or delete that data.</div>
+<div>Su cuenta contiene datos personales que usted nos proporcionó. Desde aquí puede descargarlos o eliminarlos.</div>
 <div>
-    <strong>Deleting this data will permanently remove your account, and this cannot be recovered.</strong>
+    <strong>Al eliminar estos datos se borra su cuenta de forma permanente, y no se puede recuperar.</strong>
 </div>
 <div class="block-content">
     <div class="button-group">
         <form action="Account/Manage/DownloadPersonalData" method="post" class="w-100">
             <AntiforgeryToken />
-            <DxButton SubmitFormOnClick="true" CssClass="w-100" Text="Download"></DxButton>
+            <DxButton SubmitFormOnClick="true" CssClass="w-100" Text="Descargar"></DxButton>
         </form>
         <NavLink href="Account/Manage/DeletePersonalData" class="button-link w-100">
-            <DxButton CssClass="w-100" Text="Delete" RenderStyleMode="ButtonRenderStyleMode.Outline" RenderStyle="ButtonRenderStyle.Danger"></DxButton>    
+            <DxButton CssClass="w-100" Text="Eliminar" RenderStyleMode="ButtonRenderStyleMode.Outline" RenderStyle="ButtonRenderStyle.Danger"></DxButton>    
         </NavLink>
     </div>
 </div>

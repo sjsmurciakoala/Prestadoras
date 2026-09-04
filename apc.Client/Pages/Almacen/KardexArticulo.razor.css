@@ -296,3 +296,17 @@
 .badge-mov.mov-salida  { background-color: #f8d7da; color: #842029; }
 .badge-mov.mov-ajuste  { background-color: #cfe2ff; color: #084298; }
 .badge-mov.mov-otro    { background-color: #e2e3e5; color: #41464b; }
+
+/* Línea de corte: el asiento de carga inicial desde el que corre el saldo. */
+.badge-mov.mov-corte   { background-color: #ede0ff; color: #4b2a86; }
+
+/* Visor de PDF embebido dentro del popup (mismo patrón que las pantallas de Informes).
+   El iframe llena el cuerpo del popup; el visor del navegador aporta imprimir/descargar. */
+.pdf-frame {
+    width: 100%;
+    height: calc(90vh - 92px);
+    min-height: 400px;
+    border: 0;
+    border-radius: 6px;
+    background: #f6f8fb;
+}

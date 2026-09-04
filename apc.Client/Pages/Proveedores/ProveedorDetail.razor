@@ -1,5 +1,5 @@
 ﻿@page "/proveedores/{codigo}"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Proveedores.View)]
 @using SIAD.Core.DTOs.Proveedores
 @using SIAD.Core.Constants
 @using apc.Client.Services.Proveedores
@@ -25,7 +25,7 @@
                                    Click="BackToList" />
                     <DxToolbarItem CssClass="m-2" Text="Editar" IconCssClass="oi oi-pencil"
                                    Click="EditProveedor" />
-                    <AuthorizeView Policy="@AuthorizationPolicies.Contabilidad">
+                    <AuthorizeView Policy="@PermissionNames.Contabilidad.View">
                         <Authorized>
                             <DxToolbarItem CssClass="m-2" Text="Compromisos de proveedor" IconCssClass="bi bi-cash-coin"
                                            Click="AbrirCompromisosProveedor" />
@@ -33,7 +33,7 @@
                     </AuthorizeView>
                     @if (ChequeEmision.Disponible)
                     {
-                        <AuthorizeView Policy="@AuthorizationPolicies.Bancos">
+                        <AuthorizeView Policy="@PermissionNames.Bancos.View">
                             <Authorized>
                                 <DxToolbarItem CssClass="m-2" Text="Emitir cheque manual" IconCssClass="bi bi-cash-stack"
                                                Click="AbrirChequeManual" Enabled="@(proveedor is not null)" />
@@ -71,6 +71,14 @@
                             @if (activeTabIndex == 0)
                             {
                                 <ProveedorDetailGeneral Proveedor="@proveedor" />
+                            }
+                        </ContentTemplate>
+                    </DxTabPage>
+                    <DxTabPage Text="Estado de cuenta">
+                        <ContentTemplate>
+                            @if (activeTabIndex == 1)
+                            {
+                                <ProveedorEstadoCuentaTab Codigo="@proveedor.Codigo" />
                             }
                         </ContentTemplate>
                     </DxTabPage>

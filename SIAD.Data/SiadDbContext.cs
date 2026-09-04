@@ -1811,6 +1811,7 @@ public partial class SiadDbContext : DbContext
             entity.Property(e => e.usuario_creo).HasMaxLength(100);
             entity.Property(e => e.usuario_modifica).HasMaxLength(100);
             entity.Property(e => e.company_id);
+            entity.Property(e => e.termino_pago_id);
         });
 
         modelBuilder.Entity<prv_banco>(entity =>

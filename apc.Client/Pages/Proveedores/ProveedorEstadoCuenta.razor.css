@@ -1,0 +1,31 @@
+/* Sólo lo propio de esta página; el look base viene de siad-grid.css. */
+
+.form-icon {
+    width: 44px;
+    height: 44px;
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+
+/* Ficha del proveedor: datos que no cambian con los filtros del estado de cuenta. */
+.identidad-card {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem 2.5rem;
+    align-items: center;
+    padding: 1rem 1.5rem;
+}
+
+.dato-label {
+    color: #7f8c8d;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
+.dato-valor {
+    font-weight: 600;
+    font-size: 0.92rem;
+    font-variant-numeric: tabular-nums;
+}

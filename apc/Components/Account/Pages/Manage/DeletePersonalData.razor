@@ -10,26 +10,26 @@
 @inject IdentityRedirectManager RedirectManager
 @inject ILogger<DeletePersonalData> Logger
 
-<PageTitle>Delete Personal Data</PageTitle>
+<PageTitle>Eliminar datos personales</PageTitle>
 
 <StatusMessage Message="@message" />
 <div class="block-content">
     <div class="title title-secondary">
-        <div class="title-content-text-secondary">Delete Personal Data</div>
+        <div class="title-content-text-secondary">Eliminar datos personales</div>
     </div>
-    <div>Deleting this data will permanently remove your account, and this cannot be recovered.</div>
+    <div>Al eliminar estos datos se borra su cuenta de forma permanente, y no se puede recuperar.</div>
 
     <EditForm Model="Input" FormName="delete-user" OnValidSubmit="OnValidSubmitAsync" method="post" Context="DeleteUser">
         <DataAnnotationsValidator />
         <ValidationSummary class="text-danger" role="alert" />
         <DxFormLayout CaptionPosition=@CaptionPosition.Vertical>
             @if(requirePassword) {
-                <DxFormLayoutItem Caption="Password" BeginRow="true" ColSpanMd="12">
+                <DxFormLayoutItem Caption="Contraseña" BeginRow="true" ColSpanMd="12">
                     <InteractiveServerTextBox Name="Input.Password" Value="@Input.Password" Password="true"></InteractiveServerTextBox>
                 </DxFormLayoutItem>
             }
             <DxFormLayoutItem ColSpanMd="12" BeginRow="true">
-                <DxButton CssClass="w-100" SubmitFormOnClick="true" RenderStyle="ButtonRenderStyle.Danger" Text="Delete data and close my account"></DxButton>
+                <DxButton CssClass="w-100" SubmitFormOnClick="true" RenderStyle="ButtonRenderStyle.Danger" Text="Eliminar mis datos y cerrar la cuenta"></DxButton>
             </DxFormLayoutItem>
         </DxFormLayout>
     </EditForm>

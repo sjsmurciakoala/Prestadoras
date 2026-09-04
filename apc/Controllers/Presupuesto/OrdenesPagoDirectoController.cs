@@ -1,15 +1,17 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SIAD.Core.Constants;
+using apc.Security;
 using SIAD.Core.DTOs.Presupuesto;
 using SIAD.Reports;
 using SIAD.Services.Presupuesto;
+using SIAD.Services.Retenciones;
 
 namespace apc.Controllers.Presupuesto;
 
 [ApiController]
 [Route("api/presupuesto/ordenes-pago-directo")]
-[Authorize(Policy = AuthorizationPolicies.Contabilidad)]
+[ModuleAuthorize(PermissionModules.Contabilidad)]
 public sealed class OrdenesPagoDirectoController : ControllerBase
 {
     private readonly IOrdenesPagoDirectoService _service;
@@ -60,6 +62,21 @@ public sealed class OrdenesPagoDirectoController : ControllerBase
         var result = await _service.GetCuentasGastoAsync(ct);
         return Ok(result);
     }
+
+    /// <summary>
+    /// Retenciones aplicables a una fecha (autocálculo de F2): cada una con su % vigente (o null = sin
+    /// tasa), la cuenta del pasivo configurada en la empresa, y la tasa ISV general vigente para la base
+    /// SIN_ISV. Se aloja aquí — y NO en RetencionesController — por PARIDAD DE AUTORIZACIÓN: esta
+    /// pantalla corre bajo Policy=Contabilidad, mientras que RetencionesController exige el permiso de
+    /// configuración, que un usuario de pagos podría no tener. La lógica de dominio vive en
+    /// IRetencionesService; aquí es solo transporte.
+    /// </summary>
+    [HttpGet("retenciones-aplicables")]
+    public async Task<IActionResult> GetRetencionesAplicables(
+        [FromQuery] DateOnly? fecha,
+        [FromServices] IRetencionesService retenciones,
+        CancellationToken ct)
+        => Ok(await retenciones.GetAplicablesAsync(fecha ?? DateOnly.FromDateTime(DateTime.Today), ct));
 
     [HttpGet("{numeroOrden:int}")]
     public async Task<IActionResult> GetByNumeroOrden(int numeroOrden, CancellationToken ct)

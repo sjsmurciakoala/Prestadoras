@@ -1,0 +1,61 @@
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+
+<EditForm Model="Model" OnValidSubmit="HandleValidSubmit" Context="EditFormContext">
+    <DataAnnotationsValidator />
+
+    @if (EditFormContext.GetValidationMessages().Any())
+    {
+        <div class="alert alert-danger mb-3 shadow-sm">
+            <h6 class="alert-heading"><i class="bi bi-exclamation-circle-fill me-2"></i>Atención</h6>
+            <ValidationSummary />
+        </div>
+    }
+
+    <DxFormLayout>
+        <DxFormLayoutItem Caption="Nombre *" ColSpanMd="12">
+            <DxTextBox @bind-Text="Model.Nombre" NullText="Ej. Contado, Crédito 30 días..." MaxLength="60" />
+            <ValidationMessage For="() => Model.Nombre" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Días de crédito" ColSpanMd="6">
+            <DxSpinEdit @bind-Value="Model.Dias" MinValue="0" MaxValue="3650" DisplayFormat="N0" />
+            <div class="form-text">0 = contado. Se suma a la fecha de la factura para el vencimiento.</div>
+            <ValidationMessage For="() => Model.Dias" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Predeterminado" ColSpanMd="6">
+            <Template>
+                <div class="pt-2">
+                    <DxCheckBox @bind-Checked="Model.EsDefault" CheckType="CheckType.Switch" LabelText="Proponer por defecto" />
+                </div>
+            </Template>
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Activo" ColSpanMd="12">
+            <Template>
+                <div class="pt-2">
+                    <DxCheckBox @bind-Checked="Model.Activo" CheckType="CheckType.Switch" LabelText="Activo" />
+                </div>
+            </Template>
+        </DxFormLayoutItem>
+    </DxFormLayout>
+
+    <ValidationSummary class="text-danger mb-3" />
+
+    <div class="d-flex justify-content-end gap-2">
+        <DxButton ButtonType="ButtonType.Submit" RenderStyle="ButtonRenderStyle.Primary"
+                  Text="Guardar" SubmitFormOnClick="true" Enabled="@(!IsBusy)" />
+        <DxButton ButtonType="ButtonType.Normal" Text="Cancelar" Enabled="@(!IsBusy)" Click="Cancel" />
+    </div>
+</EditForm>
+
+@code {
+    [Parameter, EditorRequired] public TerminoPagoEditDto Model { get; set; } = default!;
+    [Parameter] public EventCallback OnValidSubmit { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    [Parameter] public bool IsBusy { get; set; }
+
+    private async Task HandleValidSubmit() { if (OnValidSubmit.HasDelegate) await OnValidSubmit.InvokeAsync(); }
+    private async Task Cancel() { if (OnCancel.HasDelegate) await OnCancel.InvokeAsync(); }
+}

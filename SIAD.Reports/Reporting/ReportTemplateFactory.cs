@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Drawing;
 using System.Globalization;
 using DevExpress.DataAccess.ConnectionParameters;
@@ -8,6 +8,7 @@ using DevExpress.Drawing;
 using DevExpress.XtraPrinting;
 using DevExpress.XtraReports.Parameters;
 using DevExpress.XtraReports.UI;
+using DevExpress.XtraReports.UI.CrossTab;
 using Microsoft.Extensions.Configuration;
 using SIAD.Core.Constants;
 using SIAD.Core.Entities;
@@ -94,6 +95,22 @@ public sealed class ReportTemplateFactory
                 or ReportesWebConstants.DatasetSourceType.Sql)
         {
             return CreateBalanceComprobacionTemplate(reportCode, displayName, description, dataset);
+        }
+
+        if (IsMayorAnaliticoTemplate(reportCode, dataset) &&
+            dataset.SourceType is ReportesWebConstants.DatasetSourceType.StoredProcedure
+                or ReportesWebConstants.DatasetSourceType.View
+                or ReportesWebConstants.DatasetSourceType.Sql)
+        {
+            return CreateMayorAnaliticoTemplate(reportCode, displayName, description, dataset);
+        }
+
+        if (IsPresupuestoComparativoTemplate(reportCode, dataset) &&
+            dataset.SourceType is ReportesWebConstants.DatasetSourceType.StoredProcedure
+                or ReportesWebConstants.DatasetSourceType.View
+                or ReportesWebConstants.DatasetSourceType.Sql)
+        {
+            return CreatePresupuestoComparativoTemplate(reportCode, displayName, description, dataset);
         }
 
         if (IsEstadoSituacionFinancieraTemplate(reportCode, dataset) &&
@@ -1660,6 +1677,326 @@ public sealed class ReportTemplateFactory
         => string.Equals(ReportesWebConstants.NormalizeCode(reportCode), ReportesWebConstants.CodigoReporteEstadoFlujoEfectivo, StringComparison.OrdinalIgnoreCase)
            || string.Equals(dataset.Code, ReportesWebConstants.CodigoDatasetEstadoFlujoEfectivo, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Comparativo de presupuesto: por cada cuenta, lo presupuestado y lo ejecutado del ejercicio
+    /// y lo presupuestado del siguiente, con sus diferencias.
+    ///
+    /// Las diferencias y los porcentajes se calculan aqui y no en la consulta: los tres importes
+    /// ya vienen en la misma fila, asi que pedirle a la base que reste seria tener la misma regla
+    /// escrita en dos sitios.
+    /// </summary>
+    private XtraReport CreatePresupuestoComparativoTemplate(string reportCode, string displayName, string? description, DatasetDefinition dataset)
+    {
+        var report = CreateBaseReport(reportCode, displayName);
+        report.PaperKind = DevExpress.Drawing.Printing.DXPaperKind.Letter;
+
+        // Apaisado: son siete columnas de cifras y en vertical no caben.
+        report.Landscape = true;
+        report.Margins = new DXMargins(40, 40, 78, 58);
+        report.RequestParameters = dataset.Parameters.Any(x => x.Source == ReportesWebConstants.DatasetParameterValueSource.Report && x.Visible);
+
+        foreach (var parameter in dataset.Parameters)
+        {
+            var reportParameter = CreateReportParameter(parameter);
+            ApplyPresupuestoComparativoTemplateDefaults(reportParameter);
+            report.Parameters.Add(reportParameter);
+        }
+
+        var queryName = string.IsNullOrWhiteSpace(dataset.Code) ? "MainQuery" : dataset.Code.Replace('-', '_');
+        var dataSource = CreateRelationalDataSource(dataset, queryName);
+        report.ComponentStorage.AddRange([dataSource]);
+        report.DataSource = dataSource;
+        report.DataMember = queryName;
+
+        EstadoFinancieroLayout.AplicarMembrete(report, ResolveCurrentCompany());
+
+        const float contentWidth = 980f;
+        const float descriptionWidth = 320f;
+        const float amountWidth = 110f;
+        const float percentWidth = 60f;
+
+        var reportHeader = EstadoFinancieroLayout.CrearEncabezado("PRESUPUESTO");
+
+        // Cabecera en dos niveles: el ejercicio en curso -presupuestado, ejecutado y su
+        // diferencia- y el siguiente.
+        var pageHeader = new PageHeaderBand { HeightF = 34f };
+        var x = descriptionWidth;
+
+        foreach (var (titulo, ancho) in new (string, float)[]
+        {
+            ("Presupuestado", amountWidth),
+            ("Ejecutado", amountWidth),
+            ("DIFERENCIA", amountWidth),
+            ("%", percentWidth),
+            ("Presupuestado", amountWidth),
+            ("DIFERENCIA", amountWidth),
+            ("%", percentWidth),
+        })
+        {
+            pageHeader.Controls.Add(new XRLabel
+            {
+                BoundsF = new RectangleF(x, 0f, ancho, 15f),
+                Font = new DXFont("Arial", 8.5f, DXFontStyle.Bold),
+                Text = titulo,
+                TextAlignment = TextAlignment.MiddleRight,
+                Padding = new PaddingInfo(0, 6, 0, 0),
+            });
+            x += ancho;
+        }
+
+        // Debajo del rotulo, el anio al que pertenece cada bloque.
+        var anioBase = new XRLabel
+        {
+            BoundsF = new RectangleF(descriptionWidth, 16f, amountWidth * 3 + percentWidth, 15f),
+            Font = new DXFont("Arial", 9f, DXFontStyle.Bold | DXFontStyle.Underline),
+            TextAlignment = TextAlignment.MiddleCenter,
+        };
+        anioBase.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[anio_base]"));
+
+        var anioSiguiente = new XRLabel
+        {
+            BoundsF = new RectangleF(descriptionWidth + amountWidth * 3 + percentWidth, 16f,
+                                     amountWidth * 2 + percentWidth, 15f),
+            Font = new DXFont("Arial", 9f, DXFontStyle.Bold | DXFontStyle.Underline),
+            TextAlignment = TextAlignment.MiddleCenter,
+        };
+        anioSiguiente.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[anio_siguiente]"));
+
+        pageHeader.Controls.AddRange([anioBase, anioSiguiente]);
+
+        var groupHeader = new GroupHeaderBand { HeightF = 20f, RepeatEveryPage = true };
+        groupHeader.GroupFields.Add(new GroupField("seccion_orden"));
+        groupHeader.GroupFields.Add(new GroupField("seccion_nombre"));
+
+        var sectionLabel = new XRLabel
+        {
+            BoundsF = new RectangleF(0f, 5f, contentWidth, 15f),
+            Font = new DXFont("Arial", 9.5f, DXFontStyle.Bold),
+            TextAlignment = TextAlignment.MiddleLeft
+        };
+        sectionLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[seccion_nombre]"));
+        groupHeader.Controls.Add(sectionLabel);
+
+        var detailBand = new DetailBand { HeightF = 15f };
+        var detailTable = new XRTable
+        {
+            BoundsF = new RectangleF(0f, 2f, contentWidth, 13f),
+            BorderWidth = 0f,
+            Borders = BorderSide.None,
+            Font = new DXFont("Arial", 8.5f)
+        };
+
+        const string diferenciaBase = "[ejecutado_base] - [presupuestado_base]";
+        const string diferenciaSiguiente = "[presupuestado_siguiente] - [presupuestado_base]";
+
+        var detailRow = new XRTableRow();
+        detailRow.Cells.AddRange(
+        [
+            EstadoFinancieroLayout.CeldaConcepto("[cuenta_nombre]", descriptionWidth),
+            EstadoFinancieroLayout.CeldaImporte("[presupuestado_base]", amountWidth),
+            EstadoFinancieroLayout.CeldaImporte("[ejecutado_base]", amountWidth),
+            EstadoFinancieroLayout.CeldaImporte(diferenciaBase, amountWidth),
+            EstadoFinancieroLayout.CeldaPorcentaje(
+                EstadoFinancieroLayout.ExpresionVariacionPorcentual("[ejecutado_base]", "[presupuestado_base]"),
+                percentWidth),
+            EstadoFinancieroLayout.CeldaImporte("[presupuestado_siguiente]", amountWidth),
+            EstadoFinancieroLayout.CeldaImporte(diferenciaSiguiente, amountWidth),
+            EstadoFinancieroLayout.CeldaPorcentaje(
+                EstadoFinancieroLayout.ExpresionVariacionPorcentual("[presupuestado_siguiente]", "[presupuestado_base]"),
+                percentWidth)
+        ]);
+        detailTable.Rows.Add(detailRow);
+        detailBand.Controls.Add(detailTable);
+
+        // Cada seccion cierra con su suma; el reporte la calcula agrupando.
+        var groupFooter = EstadoFinancieroLayout.CrearPieDeGrupo(
+            "'Suman los ' + Lower([seccion_nombre])",
+            descriptionWidth, amountWidth, conVariacion: false,
+            "[presupuestado_base]", "[ejecutado_base]");
+
+        report.Bands.AddRange([reportHeader, pageHeader, groupHeader, detailBand, groupFooter]);
+        return report;
+    }
+
+    /// <summary>
+    /// Sin anio, el comparativo sale en blanco: el parametro llega en cero y no hay ejercicio que
+    /// buscar. Por defecto, el anio en curso.
+    /// </summary>
+    private static void ApplyPresupuestoComparativoTemplateDefaults(Parameter parameter)
+    {
+        if (parameter is null)
+        {
+            return;
+        }
+
+        if (string.Equals(parameter.Name, "AnioBase", StringComparison.OrdinalIgnoreCase))
+        {
+            parameter.Value = (long)DateTime.Today.Year;
+        }
+    }
+
+    /// <summary>
+    /// Mayor analitico: por cada cuenta, su saldo de apertura, los movimientos del periodo en
+    /// orden y el saldo de cierre.
+    ///
+    /// Tiene constructor propio porque un mayor no es una rejilla de columnas: la cuenta es el
+    /// grupo y el saldo corriente solo significa algo dentro de ella.
+    /// </summary>
+    private XtraReport CreateMayorAnaliticoTemplate(string reportCode, string displayName, string? description, DatasetDefinition dataset)
+    {
+        var report = CreateBaseReport(reportCode, displayName);
+        report.PaperKind = DevExpress.Drawing.Printing.DXPaperKind.Letter;
+
+        // Apaisado: la descripcion de la poliza necesita ancho para no salir cortada.
+        report.Landscape = true;
+        report.Margins = new DXMargins(40, 40, 78, 58);
+        report.RequestParameters = dataset.Parameters.Any(x => x.Source == ReportesWebConstants.DatasetParameterValueSource.Report && x.Visible);
+
+        foreach (var parameter in dataset.Parameters)
+        {
+            var reportParameter = CreateReportParameter(parameter);
+            ApplyMayorAnaliticoTemplateDefaults(reportParameter);
+            report.Parameters.Add(reportParameter);
+        }
+
+        var queryName = string.IsNullOrWhiteSpace(dataset.Code) ? "MainQuery" : dataset.Code.Replace('-', '_');
+        var dataSource = CreateRelationalDataSource(dataset, queryName);
+        report.ComponentStorage.AddRange([dataSource]);
+        report.DataSource = dataSource;
+        report.DataMember = queryName;
+
+        var empresa = ResolveCurrentCompany();
+        EstadoFinancieroLayout.AplicarMembrete(report, empresa);
+
+        const float contentWidth = 980f;
+        const float fechaWidth = 70f;
+        const float polizaWidth = 80f;
+        const float documentoWidth = 95f;
+        const float tipoWidth = 100f;
+        const float descripcionWidth = 320f;
+        const float amountWidth = 105f;
+
+        // El mayor NO devuelve los datos de la empresa por fila: se le pasan resueltos.
+        var reportHeader = EstadoFinancieroLayout.CrearEncabezado(
+            "MAYOR ANALITICO", empresa: empresa);
+
+        // Cabecera de columnas del detalle. Los rotulos son fijos: aqui no hay anios que varien.
+        var pageHeader = new PageHeaderBand { HeightF = 20f };
+        var x = 0f;
+
+        foreach (var (titulo, ancho, alaDerecha) in new (string, float, bool)[]
+        {
+            ("Fecha", fechaWidth, false),
+            ("Poliza", polizaWidth, false),
+            ("Documento", documentoWidth, false),
+            ("Tipo", tipoWidth, false),
+            ("Descripcion", descripcionWidth, false),
+            ("Debe", amountWidth, true),
+            ("Haber", amountWidth, true),
+            ("Saldo", amountWidth, true),
+        })
+        {
+            pageHeader.Controls.Add(new XRLabel
+            {
+                BoundsF = new RectangleF(x, 2f, ancho, 15f),
+                Font = new DXFont("Arial", 8.5f, DXFontStyle.Bold | DXFontStyle.Underline),
+                Text = titulo,
+                TextAlignment = alaDerecha ? TextAlignment.MiddleRight : TextAlignment.MiddleLeft,
+                Padding = new PaddingInfo(alaDerecha ? 0 : 4, alaDerecha ? 6 : 0, 0, 0),
+            });
+            x += ancho;
+        }
+
+        // La cuenta es el grupo: su encabezado lleva el codigo, el nombre y el saldo de apertura.
+        var groupHeader = new GroupHeaderBand { HeightF = 24f, RepeatEveryPage = true };
+        groupHeader.GroupFields.Add(new GroupField("cuenta_codigo"));
+
+        var cuentaLabel = new XRLabel
+        {
+            // Termina donde empieza el saldo anterior, para no pisarlo.
+            BoundsF = new RectangleF(0f, 6f, contentWidth - amountWidth * 3f, 15f),
+            Font = new DXFont("Arial", 9.5f, DXFontStyle.Bold),
+            TextAlignment = TextAlignment.MiddleLeft
+        };
+        cuentaLabel.ExpressionBindings.Add(new ExpressionBinding(
+            "BeforePrint", "Text", "[cuenta_codigo] + '  ' + [cuenta_nombre]"));
+
+        // Rotulo y cifra en UN solo control. En dos, el rotulo salia cortado ("Saldo anterio")
+        // por mucho que se le diera ancho: la etiqueta alineada a la derecha junto a otra pegada
+        // a su borde termina recortandose. Con la expresion completa el problema desaparece.
+        var saldoAnterior = new XRLabel
+        {
+            BoundsF = new RectangleF(contentWidth - amountWidth * 3f, 6f, amountWidth * 3f, 15f),
+            Font = new DXFont("Arial", 9f, DXFontStyle.Bold),
+            TextAlignment = TextAlignment.MiddleRight,
+            Padding = new PaddingInfo(0, 6, 0, 0),
+            WordWrap = false,
+        };
+        saldoAnterior.ExpressionBindings.Add(new ExpressionBinding(
+            "BeforePrint", "Text", "'Saldo anterior   ' + FormatString('{0:#,##0;(#,##0);-}', [saldo_anterior])"));
+
+        groupHeader.Controls.AddRange([cuentaLabel, saldoAnterior]);
+
+        var detailBand = new DetailBand { HeightF = 15f };
+        var detailTable = new XRTable
+        {
+            BoundsF = new RectangleF(0f, 2f, contentWidth, 13f),
+            BorderWidth = 0f,
+            Borders = BorderSide.None,
+            Font = new DXFont("Arial", 8.5f)
+        };
+
+        var fechaCell = EstadoFinancieroLayout.CeldaConcepto("[fecha]", fechaWidth);
+        fechaCell.TextFormatString = "{0:dd/MM/yyyy}";
+
+        var detailRow = new XRTableRow();
+        detailRow.Cells.AddRange(
+        [
+            fechaCell,
+            EstadoFinancieroLayout.CeldaConcepto("[poliza_number]", polizaWidth),
+            EstadoFinancieroLayout.CeldaConcepto("[documento]", documentoWidth),
+            EstadoFinancieroLayout.CeldaConcepto("[tipo_transaccion]", tipoWidth),
+            EstadoFinancieroLayout.CeldaConcepto("[descripcion]", descripcionWidth),
+            EstadoFinancieroLayout.CeldaImporte("[debe]", amountWidth),
+            EstadoFinancieroLayout.CeldaImporte("[haber]", amountWidth),
+            EstadoFinancieroLayout.CeldaImporte("[saldo_corriente]", amountWidth)
+        ]);
+        detailTable.Rows.Add(detailRow);
+        detailBand.Controls.Add(detailTable);
+
+        // Cada cuenta cierra con la suma de sus movimientos.
+        var groupFooter = EstadoFinancieroLayout.CrearPieDeGrupo(
+            "'Suman los movimientos de ' + [cuenta_codigo]",
+            fechaWidth + polizaWidth + documentoWidth + tipoWidth + descripcionWidth,
+            amountWidth, conVariacion: false,
+            "[debe]", "[haber]");
+
+        report.Bands.AddRange([reportHeader, pageHeader, groupHeader, detailBand, groupFooter]);
+        return report;
+    }
+
+    /// <summary>
+    /// Sin rango, el mayor sale vacio: las fechas llegan sin valor y la consulta no encuentra
+    /// movimientos. Por defecto, el ejercicio en curso.
+    /// </summary>
+    private static void ApplyMayorAnaliticoTemplateDefaults(Parameter parameter)
+    {
+        parameter.Value = parameter.Name switch
+        {
+            "FechaDesde" => new DateTime(DateTime.Today.Year, 1, 1),
+            "FechaHasta" => DateTime.Today,
+            _ => parameter.Value
+        };
+    }
+
+    private static bool IsMayorAnaliticoTemplate(string reportCode, DatasetDefinition dataset)
+        => string.Equals(ReportesWebConstants.NormalizeCode(reportCode), ReportesWebConstants.CodigoReporteMayorAnalitico, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(dataset.Code, ReportesWebConstants.CodigoDatasetMayorAnalitico, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPresupuestoComparativoTemplate(string reportCode, DatasetDefinition dataset)
+        => string.Equals(ReportesWebConstants.NormalizeCode(reportCode), ReportesWebConstants.CodigoReportePresupuestoComparativo, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(dataset.Code, ReportesWebConstants.CodigoDatasetPresupuestoComparativo, StringComparison.OrdinalIgnoreCase);
+
     private static bool IsEstadoCambiosPatrimonioTemplate(string reportCode, DatasetDefinition dataset)
         => string.Equals(ReportesWebConstants.NormalizeCode(reportCode), ReportesWebConstants.CodigoReporteEstadoCambiosPatrimonio, StringComparison.OrdinalIgnoreCase)
            || string.Equals(dataset.Code, ReportesWebConstants.CodigoDatasetEstadoCambiosPatrimonio, StringComparison.OrdinalIgnoreCase);
@@ -2007,8 +2344,12 @@ public sealed class ReportTemplateFactory
     private XtraReport CreateBalanceComprobacionTemplate(string reportCode, string displayName, string? description, DatasetDefinition dataset)
     {
         var report = CreateBaseReport(reportCode, displayName);
-        report.Landscape = true;
         report.PaperKind = DevExpress.Drawing.Printing.DXPaperKind.Letter;
+
+        // Vertical, como el resto del juego: sin el desglose deudor/acreedor quedan cuatro
+        // columnas de cifras y caben de sobra.
+        // Los margenes superior e inferior los ocupa el membrete.
+        report.Margins = new DXMargins(40, 40, 78, 58);
         report.RequestParameters = dataset.Parameters.Any(x => x.Source == ReportesWebConstants.DatasetParameterValueSource.Report && x.Visible);
 
         foreach (var parameter in dataset.Parameters)
@@ -2024,192 +2365,72 @@ public sealed class ReportTemplateFactory
         report.DataSource = dataSource;
         report.DataMember = queryName;
 
-        var reportHeader = new ReportHeaderBand { HeightF = 110f };
-        var pageHeader = new PageHeaderBand { HeightF = 56f };
-        var groupHeader = new GroupHeaderBand { HeightF = 26f, RepeatEveryPage = true };
-        var detailBand = new DetailBand { HeightF = 22f };
-        var reportFooter = new ReportFooterBand { HeightF = 28f };
-        var pageFooter = new PageFooterBand { HeightF = 24f };
+        EstadoFinancieroLayout.AplicarMembrete(report, ResolveCurrentCompany());
 
-        var companyLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 0f, 960f, 20f),
-            Font = new DXFont("Arial", 10f, DXFontStyle.Bold),
-            TextAlignment = TextAlignment.MiddleCenter
-        };
-        companyLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[empresa_nombre]"));
+        const float contentWidth = EstadoFinancieroLayout.AnchoContenido;
+        const float codeWidth = 95f;
+        const float descriptionWidth = 255f;
 
-        var titleLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 24f, 960f, 26f),
-            Font = new DXFont("Arial", 14f, DXFontStyle.Bold),
-            Text = "BALANCE DE COMPROBACION",
-            TextAlignment = TextAlignment.MiddleLeft
-        };
+        // 100 y no 90: con 90 el rotulo "Saldo anterior" parte en dos lineas.
+        const float amountWidth = 100f;
 
-        var periodLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 52f, 960f, 16f),
-            Font = new DXFont("Arial", 8f),
-            ForeColor = Color.DimGray,
-            TextAlignment = TextAlignment.MiddleLeft
-        };
-        periodLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "FormatString('Del {0:dd/MM/yyyy} al {1:dd/MM/yyyy}', ?FechaDesde, ?FechaHasta)"));
+        var reportHeader = EstadoFinancieroLayout.CrearEncabezado("BALANCE DE COMPROBACION");
 
-        var infoLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 68f, 960f, 16f),
-            Font = new DXFont("Arial", 8f),
-            ForeColor = Color.DimGray,
-            TextAlignment = TextAlignment.MiddleLeft
-        };
-        infoLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "FormatString('{0} | RTN: {1} | Tel: {2} | Email: {3}', [empresa_nombre_legal], [empresa_rtn], [empresa_telefono], [empresa_email])"));
+        // Cuatro columnas y una sola fila de rotulos: el saldo de apertura, el movimiento del
+        // periodo en debe y haber, y el saldo de cierre. Sin el desglose deudor/acreedor, que
+        // duplicaba cada saldo en dos columnas de las que una siempre iba vacia.
+        var pageHeader = EstadoFinancieroLayout.CrearCabeceraColumnas(
+            codeWidth + descriptionWidth,
+            amountWidth,
+            "'Saldo anterior'", "'Debe'", "'Haber'", "'Saldo actual'");
 
-        var addressLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 84f, 960f, 16f),
-            Font = new DXFont("Arial", 8f),
-            ForeColor = Color.DimGray,
-            TextAlignment = TextAlignment.MiddleLeft
-        };
-        addressLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[empresa_direccion]"));
-
-        reportHeader.Controls.AddRange([companyLabel, titleLabel, periodLabel, infoLabel, addressLabel]);
-
-        pageHeader.Controls.Add(new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 0f, 960f, 18f),
-            Font = new DXFont("Arial", 8.5f),
-            ForeColor = Color.DimGray,
-            Text = "Formato base alineado con ERSAPS. Valores expresados sin decimales para salida regulatoria.",
-            TextAlignment = TextAlignment.MiddleLeft
-        });
-
-        var headerTable = new XRTable
-        {
-            BoundsF = new RectangleF(0f, 22f, 960f, 34f),
-            BackColor = Color.FromArgb(232, 238, 245),
-            Borders = BorderSide.All,
-            BorderWidth = 1f,
-            Font = new DXFont("Arial", 8.25f, DXFontStyle.Bold),
-            ForeColor = Color.FromArgb(39, 54, 74),
-            TextAlignment = TextAlignment.MiddleCenter
-        };
-
-        var headerRow = new XRTableRow();
-        headerRow.Cells.AddRange(
-        [
-            CreateHeaderCell("Codigo", 1.20f),
-            CreateHeaderCell("Cuenta", 2.80f),
-            CreateHeaderCell("Saldo anterior\ndeudor", 1.10f),
-            CreateHeaderCell("Saldo anterior\nacreedor", 1.10f),
-            CreateHeaderCell("Debitos", 1.05f),
-            CreateHeaderCell("Creditos", 1.05f),
-            CreateHeaderCell("Saldo actual\ndeudor", 1.10f),
-            CreateHeaderCell("Saldo actual\nacreedor", 1.10f)
-        ]);
-        headerTable.Rows.Add(headerRow);
-        pageHeader.Controls.Add(headerTable);
-
+        var groupHeader = new GroupHeaderBand { HeightF = 22f, RepeatEveryPage = true };
         groupHeader.GroupFields.Add(new GroupField("rubro_orden"));
         groupHeader.GroupFields.Add(new GroupField("rubro_nombre"));
 
-        var groupLabel = new XRLabel
+        var rubroLabel = new XRLabel
         {
-            BoundsF = new RectangleF(0f, 0f, 960f, 24f),
-            BackColor = Color.FromArgb(244, 247, 250),
-            Borders = BorderSide.Top | BorderSide.Bottom,
-            BorderWidth = 1f,
-            Font = new DXFont("Arial", 10f, DXFontStyle.Bold),
-            Padding = new PaddingInfo(6, 6, 0, 0),
+            BoundsF = new RectangleF(0f, 6f, contentWidth, 15f),
+            Font = new DXFont("Arial", 9.5f, DXFontStyle.Bold),
             TextAlignment = TextAlignment.MiddleLeft
         };
-        groupLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[rubro_nombre]"));
-        groupHeader.Controls.Add(groupLabel);
+        rubroLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[rubro_nombre]"));
+        groupHeader.Controls.Add(rubroLabel);
+
+        // Cuenta MAYOR: la que tiene cuentas colgando. Se toma del dato y no de un nivel fijo,
+        // porque cada empresa arma su plan de cuentas con la profundidad que quiere.
+        const string esCuentaMayor = "[tiene_hijos]";
+
+        var detailBand = new DetailBand { HeightF = 15f };
+        detailBand.Controls.Add(EstadoFinancieroLayout.LineaSobreTotal(
+            codeWidth + descriptionWidth, amountWidth, 4, esCuentaMayor));
 
         var detailTable = new XRTable
         {
-            BoundsF = new RectangleF(0f, 0f, 960f, 22f),
-            Borders = BorderSide.Left | BorderSide.Right | BorderSide.Bottom,
-            BorderWidth = 1f,
-            Font = new DXFont("Arial", 8f),
-            OddStyleName = "TrialBalanceOddStyle"
+            BoundsF = new RectangleF(0f, 2f, contentWidth, 13f),
+            BorderWidth = 0f,
+            Borders = BorderSide.None,
+            Font = new DXFont("Arial", 8.5f)
         };
+
+        var codigoCell = EstadoFinancieroLayout.CeldaConcepto("[cuenta_codigo]", codeWidth);
 
         var detailRow = new XRTableRow();
         detailRow.Cells.AddRange(
         [
-            CreateDetailCell("[cuenta_codigo]", 1.20f),
-            CreateDetailCell("[cuenta_nombre_mostrar]", 2.80f),
-            CreateDetailCell("[saldo_anterior_deudor]", 1.10f, TextAlignment.MiddleRight, "{0:n0}"),
-            CreateDetailCell("[saldo_anterior_acreedor]", 1.10f, TextAlignment.MiddleRight, "{0:n0}"),
-            CreateDetailCell("[debitos_periodo]", 1.05f, TextAlignment.MiddleRight, "{0:n0}"),
-            CreateDetailCell("[creditos_periodo]", 1.05f, TextAlignment.MiddleRight, "{0:n0}"),
-            CreateDetailCell("[saldo_actual_deudor]", 1.10f, TextAlignment.MiddleRight, "{0:n0}"),
-            CreateDetailCell("[saldo_actual_acreedor]", 1.10f, TextAlignment.MiddleRight, "{0:n0}")
+            codigoCell,
+            EstadoFinancieroLayout.CeldaConcepto("[cuenta_nombre_mostrar]", descriptionWidth, "[nivel] - 1"),
+            EstadoFinancieroLayout.CeldaImporte("[saldo_anterior]", amountWidth),
+            EstadoFinancieroLayout.CeldaImporte("[debitos_periodo]", amountWidth),
+            EstadoFinancieroLayout.CeldaImporte("[creditos_periodo]", amountWidth),
+            EstadoFinancieroLayout.CeldaImporte("[saldo_actual]", amountWidth)
         ]);
+
+        EstadoFinancieroLayout.MarcarComoTotal(detailRow, esCuentaMayor);
         detailTable.Rows.Add(detailRow);
         detailBand.Controls.Add(detailTable);
 
-        var footerTable = new XRTable
-        {
-            BoundsF = new RectangleF(0f, 0f, 960f, 26f),
-            Borders = BorderSide.Top,
-            BorderWidth = 1f,
-            Font = new DXFont("Arial", 8.5f, DXFontStyle.Bold),
-            TextAlignment = TextAlignment.MiddleRight
-        };
-
-        var footerRow = new XRTableRow();
-        footerRow.Cells.AddRange(
-        [
-            new XRTableCell
-            {
-                Text = "Totales",
-                Weight = 4.00f,
-                Padding = new PaddingInfo(4, 4, 0, 0),
-                TextAlignment = TextAlignment.MiddleLeft
-            },
-            CreateSummaryCell("[saldo_anterior_deudor]", 1.10f),
-            CreateSummaryCell("[saldo_anterior_acreedor]", 1.10f),
-            CreateSummaryCell("[debitos_periodo]", 1.05f),
-            CreateSummaryCell("[creditos_periodo]", 1.05f),
-            CreateSummaryCell("[saldo_actual_deudor]", 1.10f),
-            CreateSummaryCell("[saldo_actual_acreedor]", 1.10f)
-        ]);
-        footerTable.Rows.Add(footerRow);
-        reportFooter.Controls.Add(footerTable);
-
-        pageFooter.Controls.AddRange(
-        [
-            new XRPageInfo
-            {
-                BoundsF = new RectangleF(0f, 0f, 260f, 20f),
-                Font = new DXFont("Arial", 8f),
-                PageInfo = PageInfo.DateTime,
-                TextAlignment = TextAlignment.MiddleLeft,
-                TextFormatString = "Generado: {0:dd/MM/yyyy HH:mm}"
-            },
-            new XRPageInfo
-            {
-                BoundsF = new RectangleF(760f, 0f, 200f, 20f),
-                Font = new DXFont("Arial", 8f),
-                PageInfo = PageInfo.NumberOfTotal,
-                TextAlignment = TextAlignment.MiddleRight,
-                TextFormatString = "Pagina {0} de {1}"
-            }
-        ]);
-
-        report.StyleSheet.AddRange(
-        [
-            new XRControlStyle
-            {
-                Name = "TrialBalanceOddStyle",
-                BackColor = Color.FromArgb(248, 250, 252)
-            }
-        ]);
-
-        report.Bands.AddRange([reportHeader, pageHeader, groupHeader, detailBand, reportFooter, pageFooter]);
+        report.Bands.AddRange([reportHeader, pageHeader, groupHeader, detailBand]);
         return report;
     }
 
@@ -2217,7 +2438,9 @@ public sealed class ReportTemplateFactory
     {
         var report = CreateBaseReport(reportCode, displayName);
         report.PaperKind = DevExpress.Drawing.Printing.DXPaperKind.Letter;
-        report.Margins = new DXMargins(50, 50, 35, 35);
+
+        // Los margenes superior e inferior los ocupa el membrete.
+        report.Margins = new DXMargins(50, 50, 78, 58);
         report.RequestParameters = dataset.Parameters.Any(x => x.Source == ReportesWebConstants.DatasetParameterValueSource.Report && x.Visible);
 
         foreach (var parameter in dataset.Parameters)
@@ -2233,182 +2456,99 @@ public sealed class ReportTemplateFactory
         report.DataSource = dataSource;
         report.DataMember = queryName;
 
-        const float contentWidth = 750f;
-        const float descriptionWidth = 420f;
-        const float amountWidth = 145f;
-        const float previousAmountWidth = 145f;
+        EstadoFinancieroLayout.AplicarMembrete(report, ResolveCurrentCompany());
 
-        var reportHeader = new ReportHeaderBand { HeightF = 112f };
-        var pageHeader = new PageHeaderBand { HeightF = 30f };
-        var groupHeader = new GroupHeaderBand { HeightF = 26f, RepeatEveryPage = true };
-        var detailBand = new DetailBand { HeightF = 24f };
-        var groupFooter = new GroupFooterBand { HeightF = 30f };
-        var reportFooter = new ReportFooterBand { HeightF = 32f };
-        var pageFooter = new PageFooterBand { HeightF = 24f };
+        const float contentWidth = EstadoFinancieroLayout.AnchoContenido;
+        const float descriptionWidth = 350f;
+        const float amountWidth = 100f;
 
-        var companyLabel = new XRLabel
+        var reportHeader = EstadoFinancieroLayout.CrearEncabezado("BALANCE GENERAL");
+
+        // El balance se corta a una FECHA, no a un rango: el anio sale de FechaCorte.
+        var pageHeader = EstadoFinancieroLayout.CrearCabeceraAgrupada(
+            descriptionWidth,
+            amountWidth,
+            ("AL 31 DE DICIEMBRE",
+             [
+                 "FormatString('{0:yyyy}', ?FechaCorte)",
+                 "FormatString('{0:yyyy}', AddYears(?FechaCorte, -1))"
+             ]),
+            ("VARIACION", ["'RELATIVA'", "'PORCENTUAL'"]));
+
+        // Dos niveles de agrupacion, como el juego impreso: la seccion (ACTIVO, PASIVO,
+        // PATRIMONIO) y dentro de ella la clase (corriente / no corriente). Cada uno cierra con
+        // su suma, que calcula el propio reporte: el SP entrega cuentas, no lineas de total.
+        // Level 0 es el grupo mas CERCANO al detalle: la seccion, que es la externa, lleva el mayor.
+        var seccionHeader = new GroupHeaderBand { HeightF = 20f, RepeatEveryPage = true, Level = 1 };
+        seccionHeader.GroupFields.Add(new GroupField("seccion_orden"));
+        seccionHeader.GroupFields.Add(new GroupField("seccion_nombre"));
+
+        var seccionLabel = new XRLabel
         {
-            BoundsF = new RectangleF(0f, 0f, contentWidth, 20f),
-            Font = new DXFont("Arial", 10f, DXFontStyle.Bold),
-            TextAlignment = TextAlignment.MiddleCenter
-        };
-        companyLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", $"?{ReportCompanyHeaderParameters.CompanyName}"));
-
-        var titleLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 28f, contentWidth, 24f),
-            Font = new DXFont("Arial", 12f, DXFontStyle.Bold),
-            TextAlignment = TextAlignment.MiddleLeft
-        };
-        titleLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "FormatString('BALANCE GENERAL AL {0:dd/MM/yyyy}', ?FechaCorte)"));
-
-        var infoLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 54f, contentWidth, 16f),
-            Font = new DXFont("Arial", 8f),
-            ForeColor = Color.DimGray,
-            TextAlignment = TextAlignment.MiddleLeft
-        };
-        infoLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", $"?{ReportCompanyHeaderParameters.CompanyInfoLine}"));
-
-        var addressLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 70f, contentWidth, 16f),
-            Font = new DXFont("Arial", 8f),
-            ForeColor = Color.DimGray,
-            TextAlignment = TextAlignment.MiddleLeft
-        };
-        addressLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", $"?{ReportCompanyHeaderParameters.CompanyAddress}"));
-
-        reportHeader.Controls.AddRange([companyLabel, titleLabel, infoLabel, addressLabel]);
-
-        var headerTable = new XRTable
-        {
-            BoundsF = new RectangleF(0f, 0f, contentWidth, 28f),
-            BorderWidth = 0f,
-            Font = new DXFont("Arial", 9f, DXFontStyle.Bold),
-            TextAlignment = TextAlignment.MiddleCenter
-        };
-        var headerRow = new XRTableRow();
-        headerRow.Cells.AddRange(
-        [
-            new XRTableCell { Text = string.Empty, WidthF = descriptionWidth, Weight = descriptionWidth },
-            new XRTableCell { Text = "Ejercicio Actual", WidthF = amountWidth, Weight = amountWidth },
-            new XRTableCell { Text = "Ejercicio Anterior", WidthF = previousAmountWidth, Weight = previousAmountWidth }
-        ]);
-        headerTable.Rows.Add(headerRow);
-        pageHeader.Controls.Add(headerTable);
-
-        groupHeader.GroupFields.Add(new GroupField("seccion_orden"));
-        groupHeader.GroupFields.Add(new GroupField("seccion_nombre"));
-
-        var sectionLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 0f, contentWidth, 24f),
+            BoundsF = new RectangleF(0f, 5f, contentWidth, 15f),
             Font = new DXFont("Arial", 10f, DXFontStyle.Bold),
             Padding = new PaddingInfo(0, 0, 0, 0),
             TextAlignment = TextAlignment.MiddleLeft
         };
-        sectionLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "Iif([seccion_nombre] = 'PATRIMONIO', 'PATRIMONIO Y RESERVAS', [seccion_nombre])"));
-        groupHeader.Controls.Add(sectionLabel);
+        seccionLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[seccion_nombre]"));
+        seccionHeader.Controls.Add(seccionLabel);
+
+        var claseHeader = new GroupHeaderBand { HeightF = 18f, RepeatEveryPage = true, Level = 0 };
+        claseHeader.GroupFields.Add(new GroupField("clase"));
+
+        var claseLabel = new XRLabel
+        {
+            BoundsF = new RectangleF(0f, 3f, contentWidth, 15f),
+            Font = new DXFont("Arial", 9f, DXFontStyle.Bold),
+            Padding = new PaddingInfo(8, 0, 0, 0),
+            TextAlignment = TextAlignment.MiddleLeft
+        };
+        claseLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[clase_nombre]"));
+        claseHeader.Controls.Add(claseLabel);
+
+        var detailBand = new DetailBand { HeightF = 15f };
+
+        // "Suma el activo corriente" y luego "Suma el activo": el rotulo sale del nombre que da
+        // la base, no de una lista escrita aqui.
+        var claseFooter = EstadoFinancieroLayout.CrearPieDeGrupo(
+            "'Suma el ' + Lower([clase_nombre])",
+            descriptionWidth, amountWidth, conVariacion: true, "[monto]", "[monto_anterior]");
+        claseFooter.Level = 0;
+
+        var seccionFooter = EstadoFinancieroLayout.CrearPieDeGrupo(
+            "'Suma el ' + Lower([seccion_nombre])",
+            descriptionWidth, amountWidth, conVariacion: true, "[monto]", "[monto_anterior]");
+        seccionFooter.Level = 1;
 
         var detailTable = new XRTable
         {
-            BoundsF = new RectangleF(0f, 0f, contentWidth, 24f),
+            BoundsF = new RectangleF(0f, 2f, contentWidth, 13f),
             BorderWidth = 0f,
-            Font = new DXFont("Arial", 9f),
-            OddStyleName = "FinancialStateOddStyle"
+            Borders = BorderSide.None,
+            Font = new DXFont("Arial", 9f)
         };
+
         var detailRow = new XRTableRow();
         detailRow.Cells.AddRange(
         [
-            new XRTableCell
-            {
-                WidthF = descriptionWidth,
-                Weight = descriptionWidth,
-                Padding = new PaddingInfo(0, 8, 0, 0),
-                TextAlignment = TextAlignment.MiddleLeft
-            },
-            CreateFinancialStatementAmountCell("[monto]", amountWidth),
-            CreateFinancialStatementAmountCell("[monto_anterior]", previousAmountWidth)
+            EstadoFinancieroLayout.CeldaConcepto("[descripcion_mostrar]", descriptionWidth, "[nivel_cuenta] - 1"),
+            EstadoFinancieroLayout.CeldaImporte("[monto]", amountWidth),
+            EstadoFinancieroLayout.CeldaImporte("[monto_anterior]", amountWidth),
+            EstadoFinancieroLayout.CeldaImporte(
+                EstadoFinancieroLayout.ExpresionVariacionRelativa("[monto]", "[monto_anterior]"), amountWidth),
+            EstadoFinancieroLayout.CeldaPorcentaje(
+                EstadoFinancieroLayout.ExpresionVariacionPorcentual("[monto]", "[monto_anterior]"), amountWidth)
         ]);
-        detailRow.Cells[0].ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[descripcion_mostrar]"));
         detailTable.Rows.Add(detailRow);
         detailBand.Controls.Add(detailTable);
 
-        var groupFooterTable = new XRTable
-        {
-            BoundsF = new RectangleF(0f, 2f, contentWidth, 26f),
-            BorderWidth = 0f,
-            Font = new DXFont("Arial", 9f, DXFontStyle.Bold)
-        };
-        var groupFooterRow = new XRTableRow();
-        var groupTotalLabel = new XRTableCell
-        {
-            WidthF = descriptionWidth,
-            Weight = descriptionWidth,
-            TextAlignment = TextAlignment.MiddleLeft
-        };
-        groupTotalLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "Concat('TOTAL DEL ', [seccion_nombre])"));
-
-        var groupTotalValue = CreateFinancialStatementSummaryCell("[monto]", amountWidth, SummaryRunning.Group);
-        var groupTotalPreviousValue = CreateFinancialStatementSummaryCell("[monto_anterior]", previousAmountWidth, SummaryRunning.Group);
-        groupFooterRow.Cells.AddRange([groupTotalLabel, groupTotalValue, groupTotalPreviousValue]);
-        groupFooterTable.Rows.Add(groupFooterRow);
-        groupFooter.Controls.Add(groupFooterTable);
-
-        var reportFooterTable = new XRTable
-        {
-            BoundsF = new RectangleF(0f, 2f, contentWidth, 28f),
-            BorderWidth = 0f,
-            Font = new DXFont("Arial", 9f, DXFontStyle.Bold)
-        };
-        var reportFooterRow = new XRTableRow();
-        reportFooterRow.Cells.AddRange(
+        report.Bands.AddRange(
         [
-            new XRTableCell
-            {
-                Text = "TOTAL PASIVO Y PATRIMONIO",
-                WidthF = descriptionWidth,
-                Weight = descriptionWidth,
-                TextAlignment = TextAlignment.MiddleLeft
-            },
-            CreateFinancialStatementSummaryCell("Iif([clase] >= 3 And [clase] <= 5, [monto], 0)", amountWidth, SummaryRunning.Report),
-            CreateFinancialStatementSummaryCell("Iif([clase] >= 3 And [clase] <= 5, [monto_anterior], 0)", previousAmountWidth, SummaryRunning.Report)
+            reportHeader, pageHeader,
+            seccionHeader, claseHeader,
+            detailBand,
+            claseFooter, seccionFooter
         ]);
-        reportFooterTable.Rows.Add(reportFooterRow);
-        reportFooter.Controls.Add(reportFooterTable);
-
-        pageFooter.Controls.AddRange(
-        [
-            new XRPageInfo
-            {
-                BoundsF = new RectangleF(0f, 0f, 260f, 20f),
-                Font = new DXFont("Arial", 8f),
-                PageInfo = PageInfo.DateTime,
-                TextAlignment = TextAlignment.MiddleLeft,
-                TextFormatString = "Generado: {0:dd/MM/yyyy HH:mm}"
-            },
-            new XRPageInfo
-            {
-                BoundsF = new RectangleF(550f, 0f, 200f, 20f),
-                Font = new DXFont("Arial", 8f),
-                PageInfo = PageInfo.NumberOfTotal,
-                TextAlignment = TextAlignment.MiddleRight,
-                TextFormatString = "Pagina {0} de {1}"
-            }
-        ]);
-
-        report.StyleSheet.AddRange(
-        [
-            new XRControlStyle
-            {
-                Name = "FinancialStateOddStyle",
-                BackColor = Color.White
-            }
-        ]);
-
-        report.Bands.AddRange([reportHeader, pageHeader, groupHeader, detailBand, groupFooter, reportFooter, pageFooter]);
         return report;
     }
 
@@ -2416,7 +2556,9 @@ public sealed class ReportTemplateFactory
     {
         var report = CreateBaseReport(reportCode, displayName);
         report.PaperKind = DevExpress.Drawing.Printing.DXPaperKind.Letter;
-        report.Margins = new DXMargins(50, 50, 35, 35);
+
+        // Los margenes superior e inferior los ocupa el membrete.
+        report.Margins = new DXMargins(50, 50, 78, 58);
         report.RequestParameters = dataset.Parameters.Any(x => x.Source == ReportesWebConstants.DatasetParameterValueSource.Report && x.Visible);
 
         foreach (var parameter in dataset.Parameters)
@@ -2432,146 +2574,69 @@ public sealed class ReportTemplateFactory
         report.DataSource = dataSource;
         report.DataMember = queryName;
 
-        const float contentWidth = 750f;
-        const float descriptionWidth = 420f;
-        const float amountWidth = 145f;
-        const float previousAmountWidth = 145f;
+        EstadoFinancieroLayout.AplicarMembrete(report, ResolveCurrentCompany());
 
-        var reportHeader = new ReportHeaderBand { HeightF = 92f };
-        var pageHeader = new PageHeaderBand { HeightF = 30f };
-        var groupHeader = new GroupHeaderBand { HeightF = 26f, RepeatEveryPage = true };
-        var detailBand = new DetailBand { HeightF = 24f };
-        var pageFooter = new PageFooterBand { HeightF = 24f };
+        const float contentWidth = EstadoFinancieroLayout.AnchoContenido;
+        const float descriptionWidth = 350f;
+        const float amountWidth = 100f;
 
-        var companyLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 0f, contentWidth, 20f),
-            Font = new DXFont("Arial", 10f, DXFontStyle.Bold),
-            TextAlignment = TextAlignment.MiddleCenter
-        };
-        companyLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[empresa_nombre]"));
+        var reportHeader = EstadoFinancieroLayout.CrearEncabezado("ESTADO DE RESULTADOS");
 
-        var titleLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 24f, contentWidth, 24f),
-            Font = new DXFont("Arial", 12f, DXFontStyle.Bold),
-            Text = "ESTADO DE RESULTADOS",
-            TextAlignment = TextAlignment.MiddleLeft
-        };
+        // Dos niveles, como el juego impreso: el corte a la izquierda y la variacion a la derecha.
+        var pageHeader = EstadoFinancieroLayout.CrearCabeceraAgrupada(
+            descriptionWidth,
+            amountWidth,
+            ("AL 31 DE DICIEMBRE",
+             [
+                 "FormatString('{0:yyyy}', ?FechaHasta)",
+                 "FormatString('{0:yyyy}', AddYears(?FechaHasta, -1))"
+             ]),
+            ("VARIACION", ["'RELATIVA'", "'PORCENTUAL'"]));
 
-        var periodLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 50f, contentWidth, 16f),
-            Font = new DXFont("Arial", 8f),
-            ForeColor = Color.DimGray,
-            TextAlignment = TextAlignment.MiddleLeft
-        };
-        periodLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "FormatString('Del {0:dd/MM/yyyy} al {1:dd/MM/yyyy}', ?FechaDesde, ?FechaHasta)"));
-
-        var infoLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 66f, contentWidth, 16f),
-            Font = new DXFont("Arial", 8f),
-            ForeColor = Color.DimGray,
-            TextAlignment = TextAlignment.MiddleLeft
-        };
-        infoLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "FormatString('{0} | RTN: {1} | Tel: {2} | Email: {3}', [empresa_nombre_legal], [empresa_rtn], [empresa_telefono], [empresa_email])"));
-
-        var addressLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 82f, contentWidth, 16f),
-            Font = new DXFont("Arial", 8f),
-            ForeColor = Color.DimGray,
-            TextAlignment = TextAlignment.MiddleLeft
-        };
-        addressLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[empresa_direccion]"));
-
-        reportHeader.Controls.AddRange([companyLabel, titleLabel, periodLabel, infoLabel, addressLabel]);
-
-        var headerTable = new XRTable
-        {
-            BoundsF = new RectangleF(0f, 0f, contentWidth, 28f),
-            BorderWidth = 0f,
-            Font = new DXFont("Arial", 9f, DXFontStyle.Bold),
-            TextAlignment = TextAlignment.MiddleCenter
-        };
-        var headerRow = new XRTableRow();
-        headerRow.Cells.AddRange(
-        [
-            new XRTableCell { Text = string.Empty, WidthF = descriptionWidth, Weight = descriptionWidth },
-            new XRTableCell { Text = "Ejercicio Actual", WidthF = amountWidth, Weight = amountWidth },
-            new XRTableCell { Text = "Ejercicio Anterior", WidthF = previousAmountWidth, Weight = previousAmountWidth }
-        ]);
-        headerTable.Rows.Add(headerRow);
-        pageHeader.Controls.Add(headerTable);
+        var groupHeader = new GroupHeaderBand { HeightF = 22f, RepeatEveryPage = true };
+        var detailBand = new DetailBand { HeightF = 15f };
 
         groupHeader.GroupFields.Add(new GroupField("seccion_orden"));
         groupHeader.GroupFields.Add(new GroupField("seccion_nombre"));
 
         var sectionLabel = new XRLabel
         {
-            BoundsF = new RectangleF(0f, 0f, contentWidth, 24f),
-            Font = new DXFont("Arial", 10f, DXFontStyle.Bold),
+            BoundsF = new RectangleF(0f, 6f, contentWidth, 15f),
+            Font = new DXFont("Arial", 9.5f, DXFontStyle.Bold),
             Padding = new PaddingInfo(0, 0, 0, 0),
             TextAlignment = TextAlignment.MiddleLeft
         };
         sectionLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[seccion_nombre]"));
         groupHeader.Controls.Add(sectionLabel);
 
+        // La linea del total cubre las cuatro columnas de cifras.
+        detailBand.Controls.Add(EstadoFinancieroLayout.LineaSobreTotal(
+            descriptionWidth, amountWidth, 4, "[mostrar_subtotal]"));
+
         var detailTable = new XRTable
         {
-            BoundsF = new RectangleF(0f, 0f, contentWidth, 24f),
+            BoundsF = new RectangleF(0f, 2f, contentWidth, 13f),
             BorderWidth = 0f,
-            Font = new DXFont("Arial", 8.5f),
-            OddStyleName = "FinancialResultsOddStyle"
+            Borders = BorderSide.None,
+            Font = new DXFont("Arial", 9f)
         };
+
         var detailRow = new XRTableRow();
         detailRow.Cells.AddRange(
         [
-            new XRTableCell
-            {
-                WidthF = descriptionWidth,
-                Weight = descriptionWidth,
-                Padding = new PaddingInfo(0, 8, 0, 0),
-                TextAlignment = TextAlignment.MiddleLeft
-            },
-            CreateFinancialStatementAmountCell("[monto]", amountWidth),
-            CreateFinancialStatementAmountCell("[monto_anterior]", previousAmountWidth)
+            EstadoFinancieroLayout.CeldaConcepto("[descripcion_mostrar]", descriptionWidth, "[nivel_indentacion]"),
+            EstadoFinancieroLayout.CeldaImporte("[monto]", amountWidth),
+            EstadoFinancieroLayout.CeldaImporte("[monto_anterior]", amountWidth),
+            EstadoFinancieroLayout.CeldaImporte(
+                EstadoFinancieroLayout.ExpresionVariacionRelativa("[monto]", "[monto_anterior]"), amountWidth),
+            EstadoFinancieroLayout.CeldaPorcentaje(
+                EstadoFinancieroLayout.ExpresionVariacionPorcentual("[monto]", "[monto_anterior]"), amountWidth)
         ]);
-        detailRow.Cells[0].ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[descripcion_mostrar]"));
+        EstadoFinancieroLayout.MarcarComoTotal(detailRow, "[mostrar_subtotal]");
         detailTable.Rows.Add(detailRow);
         detailBand.Controls.Add(detailTable);
 
-        pageFooter.Controls.AddRange(
-        [
-            new XRPageInfo
-            {
-                BoundsF = new RectangleF(0f, 0f, 260f, 20f),
-                Font = new DXFont("Arial", 8f),
-                PageInfo = PageInfo.DateTime,
-                TextAlignment = TextAlignment.MiddleLeft,
-                TextFormatString = "Generado: {0:dd/MM/yyyy HH:mm}"
-            },
-            new XRPageInfo
-            {
-                BoundsF = new RectangleF(550f, 0f, 200f, 20f),
-                Font = new DXFont("Arial", 8f),
-                PageInfo = PageInfo.NumberOfTotal,
-                TextAlignment = TextAlignment.MiddleRight,
-                TextFormatString = "Pagina {0} de {1}"
-            }
-        ]);
-
-        report.StyleSheet.AddRange(
-        [
-            new XRControlStyle
-            {
-                Name = "FinancialResultsOddStyle",
-                BackColor = Color.White
-            }
-        ]);
-
-        report.Bands.AddRange([reportHeader, pageHeader, groupHeader, detailBand, pageFooter]);
+        report.Bands.AddRange([reportHeader, pageHeader, groupHeader, detailBand]);
         return report;
     }
 
@@ -2579,7 +2644,9 @@ public sealed class ReportTemplateFactory
     {
         var report = CreateBaseReport(reportCode, displayName);
         report.PaperKind = DevExpress.Drawing.Printing.DXPaperKind.Letter;
-        report.Margins = new DXMargins(50, 50, 35, 35);
+
+        // Los margenes superior e inferior los ocupa el membrete; el ancho es el del contenido.
+        report.Margins = new DXMargins(50, 50, 78, 58);
         report.RequestParameters = dataset.Parameters.Any(x => x.Source == ReportesWebConstants.DatasetParameterValueSource.Report && x.Visible);
 
         foreach (var parameter in dataset.Parameters)
@@ -2595,107 +2662,60 @@ public sealed class ReportTemplateFactory
         report.DataSource = dataSource;
         report.DataMember = queryName;
 
-        const float contentWidth = 750f;
-        const float descriptionWidth = 420f;
+        EstadoFinancieroLayout.AplicarMembrete(report, ResolveCurrentCompany());
+
+        const float contentWidth = EstadoFinancieroLayout.AnchoContenido;
+        const float descriptionWidth = 460f;
         const float amountWidth = 145f;
-        const float previousAmountWidth = 145f;
 
-        var reportHeader = new ReportHeaderBand { HeightF = 92f };
-        var pageHeader = new PageHeaderBand { HeightF = 30f };
-        var groupHeader = new GroupHeaderBand { HeightF = 26f, RepeatEveryPage = true };
-        var detailBand = new DetailBand { HeightF = 24f };
+        var reportHeader = EstadoFinancieroLayout.CrearEncabezado("ESTADO DE FLUJO DE EFECTIVO");
+
+        // Los anios salen de la fecha del reporte, no de una constante: el encabezado tiene que
+        // seguir siendo cierto el anio que viene.
+        var pageHeader = EstadoFinancieroLayout.CrearCabeceraColumnas(
+            descriptionWidth,
+            amountWidth,
+            "FormatString('{0:yyyy}', ?FechaHasta)",
+            "FormatString('{0:yyyy}', AddYears(?FechaHasta, -1))");
+
+        var groupHeader = new GroupHeaderBand { HeightF = 22f, RepeatEveryPage = true };
+        var detailBand = new DetailBand { HeightF = 15f };
         var reportFooter = new ReportFooterBand { HeightF = 40f };
-        var pageFooter = new PageFooterBand { HeightF = 24f };
-
-        var companyLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 0f, contentWidth, 20f),
-            Font = new DXFont("Arial", 10f, DXFontStyle.Bold),
-            TextAlignment = TextAlignment.MiddleCenter
-        };
-        companyLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[empresa_nombre]"));
-
-        var titleLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 24f, contentWidth, 24f),
-            Font = new DXFont("Arial", 12f, DXFontStyle.Bold),
-            TextAlignment = TextAlignment.MiddleLeft
-        };
-        titleLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "FormatString('ESTADO DE FLUJOS DE EFECTIVO DEL {0:dd/MM/yyyy} AL {1:dd/MM/yyyy}', ?FechaDesde, ?FechaHasta)"));
-
-        var infoLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 50f, contentWidth, 16f),
-            Font = new DXFont("Arial", 8f),
-            ForeColor = Color.DimGray,
-            TextAlignment = TextAlignment.MiddleLeft
-        };
-        infoLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "FormatString('{0} | RTN: {1} | Tel: {2} | Email: {3}', [empresa_nombre_legal], [empresa_rtn], [empresa_telefono], [empresa_email])"));
-
-        var addressLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 66f, contentWidth, 16f),
-            Font = new DXFont("Arial", 8f),
-            ForeColor = Color.DimGray,
-            TextAlignment = TextAlignment.MiddleLeft
-        };
-        addressLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[empresa_direccion]"));
-
-        reportHeader.Controls.AddRange([companyLabel, titleLabel, infoLabel, addressLabel]);
-
-        var headerTable = new XRTable
-        {
-            BoundsF = new RectangleF(0f, 0f, contentWidth, 28f),
-            BorderWidth = 0f,
-            Font = new DXFont("Arial", 9f, DXFontStyle.Bold),
-            TextAlignment = TextAlignment.MiddleCenter
-        };
-        var headerRow = new XRTableRow();
-        headerRow.Cells.AddRange(
-        [
-            new XRTableCell { Text = string.Empty, WidthF = descriptionWidth, Weight = descriptionWidth },
-            new XRTableCell { Text = "Ejercicio Actual", WidthF = amountWidth, Weight = amountWidth },
-            new XRTableCell { Text = "Ejercicio Anterior", WidthF = previousAmountWidth, Weight = previousAmountWidth }
-        ]);
-        headerTable.Rows.Add(headerRow);
-        pageHeader.Controls.Add(headerTable);
 
         groupHeader.GroupFields.Add(new GroupField("seccion_orden"));
         groupHeader.GroupFields.Add(new GroupField("seccion_nombre"));
 
         var sectionLabel = new XRLabel
         {
-            BoundsF = new RectangleF(0f, 0f, contentWidth, 24f),
-            Font = new DXFont("Arial", 10f, DXFontStyle.Bold),
-            BackColor = Color.Gainsboro,
-            Padding = new PaddingInfo(6, 0, 0, 0),
+            BoundsF = new RectangleF(0f, 6f, contentWidth, 15f),
+            Font = new DXFont("Arial", 9.5f, DXFontStyle.Bold),
+            Padding = new PaddingInfo(0, 0, 0, 0),
             TextAlignment = TextAlignment.MiddleLeft
         };
         sectionLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[seccion_nombre]"));
         groupHeader.Controls.Add(sectionLabel);
 
+        // La linea del total va en su propio control: enlazar Visible es fiable, enlazar Borders
+        // obligaria a producir el enum desde texto.
+        detailBand.Controls.Add(EstadoFinancieroLayout.LineaSobreTotal(
+            descriptionWidth, amountWidth, 2, "[mostrar_subtotal]"));
+
         var detailTable = new XRTable
         {
-            BoundsF = new RectangleF(0f, 0f, contentWidth, 24f),
+            BoundsF = new RectangleF(0f, 2f, contentWidth, 13f),
             BorderWidth = 0f,
-            Font = new DXFont("Arial", 8.5f),
-            OddStyleName = "FlujoEfectivoOddStyle"
+            Borders = BorderSide.None,
+            Font = new DXFont("Arial", 9f)
         };
+
         var detailRow = new XRTableRow();
         detailRow.Cells.AddRange(
         [
-            new XRTableCell
-            {
-                WidthF = descriptionWidth,
-                Weight = descriptionWidth,
-                Padding = new PaddingInfo(0, 8, 0, 0),
-                TextAlignment = TextAlignment.MiddleLeft
-            },
-            CreateFinancialStatementAmountCell("[monto]", amountWidth),
-            CreateFinancialStatementAmountCell("[monto_anterior]", previousAmountWidth)
+            EstadoFinancieroLayout.CeldaConcepto("[descripcion_mostrar]", descriptionWidth, "[nivel_indentacion]"),
+            EstadoFinancieroLayout.CeldaImporte("[monto]", amountWidth),
+            EstadoFinancieroLayout.CeldaImporte("[monto_anterior]", amountWidth)
         ]);
-        detailRow.Cells[0].ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[descripcion_mostrar]"));
-        detailRow.Cells[0].ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Font.Bold", "[mostrar_subtotal]"));
+        EstadoFinancieroLayout.MarcarComoTotal(detailRow, "[mostrar_subtotal]");
         detailRow.Cells[0].ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Font.Italic", "[tipo_linea] == 2"));
         detailTable.Rows.Add(detailRow);
         detailBand.Controls.Add(detailTable);
@@ -2704,7 +2724,7 @@ public sealed class ReportTemplateFactory
         [
             new XRLabel
             {
-                BoundsF = new RectangleF(0f, 4f, contentWidth, 16f),
+                BoundsF = new RectangleF(0f, 8f, contentWidth, 14f),
                 Font = new DXFont("Arial", 7.5f),
                 ForeColor = Color.DimGray,
                 Text = "(1) No incluidos en actividades de inversion.",
@@ -2712,7 +2732,7 @@ public sealed class ReportTemplateFactory
             },
             new XRLabel
             {
-                BoundsF = new RectangleF(0f, 20f, contentWidth, 16f),
+                BoundsF = new RectangleF(0f, 22f, contentWidth, 14f),
                 Font = new DXFont("Arial", 7.5f),
                 ForeColor = Color.DimGray,
                 Text = "(2) No incluidos en actividades de financiacion.",
@@ -2720,36 +2740,7 @@ public sealed class ReportTemplateFactory
             }
         ]);
 
-        pageFooter.Controls.AddRange(
-        [
-            new XRPageInfo
-            {
-                BoundsF = new RectangleF(0f, 0f, 260f, 20f),
-                Font = new DXFont("Arial", 8f),
-                PageInfo = PageInfo.DateTime,
-                TextAlignment = TextAlignment.MiddleLeft,
-                TextFormatString = "Generado: {0:dd/MM/yyyy HH:mm}"
-            },
-            new XRPageInfo
-            {
-                BoundsF = new RectangleF(550f, 0f, 200f, 20f),
-                Font = new DXFont("Arial", 8f),
-                PageInfo = PageInfo.NumberOfTotal,
-                TextAlignment = TextAlignment.MiddleRight,
-                TextFormatString = "Pagina {0} de {1}"
-            }
-        ]);
-
-        report.StyleSheet.AddRange(
-        [
-            new XRControlStyle
-            {
-                Name = "FlujoEfectivoOddStyle",
-                BackColor = Color.White
-            }
-        ]);
-
-        report.Bands.AddRange([reportHeader, pageHeader, groupHeader, detailBand, reportFooter, pageFooter]);
+        report.Bands.AddRange([reportHeader, pageHeader, groupHeader, detailBand, reportFooter]);
         return report;
     }
 
@@ -2757,7 +2748,11 @@ public sealed class ReportTemplateFactory
     {
         var report = CreateBaseReport(reportCode, displayName);
         report.PaperKind = DevExpress.Drawing.Printing.DXPaperKind.Letter;
-        report.Margins = new DXMargins(50, 50, 35, 35);
+
+        // Apaisado: la matriz lleva una columna por componente del patrimonio mas el total, y en
+        // vertical no caben con cifras de nueve digitos.
+        report.Landscape = true;
+        report.Margins = new DXMargins(40, 40, 78, 58);
         report.RequestParameters = dataset.Parameters.Any(x => x.Source == ReportesWebConstants.DatasetParameterValueSource.Report && x.Visible);
 
         foreach (var parameter in dataset.Parameters)
@@ -2773,122 +2768,151 @@ public sealed class ReportTemplateFactory
         report.DataSource = dataSource;
         report.DataMember = queryName;
 
-        const float contentWidth = 750f;
-        const float componentWidth = 270f;
-        const float amountWidth = 120f;
+        EstadoFinancieroLayout.AplicarMembrete(report, ResolveCurrentCompany());
 
-        var reportHeader = new ReportHeaderBand { HeightF = 92f };
-        var pageHeader = new PageHeaderBand { HeightF = 30f };
-        var detailBand = new DetailBand { HeightF = 24f };
-        var pageFooter = new PageFooterBand { HeightF = 24f };
+        var reportHeader = EstadoFinancieroLayout.CrearEncabezado("ESTADO DE CAMBIOS EN EL PATRIMONIO");
 
-        var companyLabel = new XRLabel
+        // Una tabla de referencias cruzadas y no una tabla normal: las columnas son los
+        // componentes del patrimonio, que salen de la configuracion contable de cada empresa.
+        // Fijarlas en el codigo obligaria a tocarlo cada vez que una empresa configure los suyos.
+        var matriz = new XRCrossTab
         {
-            BoundsF = new RectangleF(0f, 0f, contentWidth, 20f),
-            Font = new DXFont("Arial", 10f, DXFontStyle.Bold),
-            TextAlignment = TextAlignment.MiddleCenter
-        };
-        companyLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[empresa_nombre]"));
-
-        var titleLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 24f, contentWidth, 24f),
-            Font = new DXFont("Arial", 12f, DXFontStyle.Bold),
-            TextAlignment = TextAlignment.MiddleLeft
-        };
-        titleLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "FormatString('ESTADO DE CAMBIOS EN EL PATRIMONIO DEL {0:dd/MM/yyyy} AL {1:dd/MM/yyyy}', ?FechaDesde, ?FechaHasta)"));
-
-        var infoLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 50f, contentWidth, 16f),
-            Font = new DXFont("Arial", 8f),
-            ForeColor = Color.DimGray,
-            TextAlignment = TextAlignment.MiddleLeft
-        };
-        infoLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "FormatString('{0} | RTN: {1} | Tel: {2} | Email: {3}', [empresa_nombre_legal], [empresa_rtn], [empresa_telefono], [empresa_email])"));
-
-        var addressLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 66f, contentWidth, 16f),
-            Font = new DXFont("Arial", 8f),
-            ForeColor = Color.DimGray,
-            TextAlignment = TextAlignment.MiddleLeft
-        };
-        addressLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[empresa_direccion]"));
-
-        reportHeader.Controls.AddRange([companyLabel, titleLabel, infoLabel, addressLabel]);
-
-        var headerTable = new XRTable
-        {
-            BoundsF = new RectangleF(0f, 0f, contentWidth, 28f),
-            BorderWidth = 0f,
-            BackColor = Color.Gainsboro,
-            Font = new DXFont("Arial", 9f, DXFontStyle.Bold),
-            TextAlignment = TextAlignment.MiddleCenter
-        };
-        var headerRow = new XRTableRow();
-        headerRow.Cells.AddRange(
-        [
-            new XRTableCell { Text = "Componente", WidthF = componentWidth, Weight = componentWidth, TextAlignment = TextAlignment.MiddleLeft, Padding = new PaddingInfo(6, 0, 0, 0) },
-            new XRTableCell { Text = "Saldo Inicial", WidthF = amountWidth, Weight = amountWidth },
-            new XRTableCell { Text = "Aumentos", WidthF = amountWidth, Weight = amountWidth },
-            new XRTableCell { Text = "Disminuciones", WidthF = amountWidth, Weight = amountWidth },
-            new XRTableCell { Text = "Saldo Final", WidthF = amountWidth, Weight = amountWidth }
-        ]);
-        headerTable.Rows.Add(headerRow);
-        pageHeader.Controls.Add(headerTable);
-
-        var detailTable = new XRTable
-        {
-            BoundsF = new RectangleF(0f, 0f, contentWidth, 24f),
-            BorderWidth = 0f,
+            BoundsF = new RectangleF(0f, 110f, 980f, 20f),
+            DataSource = dataSource,
+            DataMember = queryName,
             Font = new DXFont("Arial", 8.5f)
         };
-        var detailRow = new XRTableRow();
-        detailRow.Cells.AddRange(
-        [
-            new XRTableCell
-            {
-                WidthF = componentWidth,
-                Weight = componentWidth,
-                Padding = new PaddingInfo(0, 8, 0, 0),
-                TextAlignment = TextAlignment.MiddleLeft
-            },
-            CreateFinancialStatementAmountCell("[saldo_inicial]", amountWidth),
-            CreateFinancialStatementAmountCell("[aumentos]", amountWidth),
-            CreateFinancialStatementAmountCell("[disminuciones]", amountWidth),
-            CreateFinancialStatementAmountCell("[saldo_final]", amountWidth)
-        ]);
-        detailRow.Cells[0].ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[componente]"));
-        foreach (XRTableCell cell in detailRow.Cells)
+
+        // La tabla trae su propia hoja de estilos y pisa la fuente del control: sin esto sale con
+        // la serif por defecto, que no es la del resto del juego. Los estilos se ASIGNAN
+        // completos; mutarles una propiedad no tiene efecto.
+        matriz.CrossTabStyles.GeneralStyle = new XRControlStyle
         {
-            cell.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Font.Bold", "[es_total]"));
+            Name = "PatrimonioGeneral",
+            Font = new DXFont("Arial", 8.5f),
+            Padding = new PaddingInfo(4, 4, 1, 1),
+        };
+        matriz.CrossTabStyles.HeaderAreaStyle = new XRControlStyle
+        {
+            Name = "PatrimonioEncabezado",
+            Font = new DXFont("Arial", 8.5f, DXFontStyle.Bold),
+        };
+        matriz.CrossTabStyles.DataAreaStyle = new XRControlStyle
+        {
+            Name = "PatrimonioDatos",
+            Font = new DXFont("Arial", 8.5f),
+            TextAlignment = TextAlignment.MiddleRight,
+        };
+        matriz.CrossTabStyles.TotalAreaStyle = new XRControlStyle
+        {
+            Name = "PatrimonioTotales",
+            Font = new DXFont("Arial", 8.5f, DXFontStyle.Bold),
+            TextAlignment = TextAlignment.MiddleRight,
+        };
+
+        // Sin orden propio: las filas se imprimen en el orden en que las entrega la consulta, que
+        // es el del estado -saldo de apertura, movimientos, saldo de cierre-. Ordenadas por
+        // nombre saldrian alfabeticas, que no significa nada en un estado financiero.
+        matriz.RowFields.Add(new CrossTabRowField
+        {
+            FieldName = "fila_nombre",
+            SortOrder = XRColumnSortOrder.None
+        });
+        matriz.ColumnFields.Add(new CrossTabColumnField { FieldName = "componente" });
+        matriz.DataFields.Add(new CrossTabDataField { FieldName = "monto" });
+
+        // Un estilo solo surte efecto si esta registrado en la hoja del reporte; asignarlo a la
+        // matriz sin registrarlo lo deja sin aplicar y todo sale con la serif por defecto.
+        report.StyleSheet.AddRange(
+        [
+            matriz.CrossTabStyles.GeneralStyle,
+            matriz.CrossTabStyles.HeaderAreaStyle,
+            matriz.CrossTabStyles.DataAreaStyle,
+            matriz.CrossTabStyles.TotalAreaStyle,
+        ]);
+
+        // Los encabezados se repiten si la matriz parte de pagina.
+        matriz.PrintOptions.RepeatColumnHeaders = true;
+        matriz.PrintOptions.RepeatRowHeaders = true;
+
+        matriz.GenerateLayout();
+
+        // Retoques sobre las celdas ya generadas:
+        //
+        //  - la esquina superior izquierda trae el nombre del campo, que no le dice nada a nadie;
+        //  - el total de COLUMNA es el patrimonio total y merece su nombre;
+        //  - el total de FILA suma saldos con movimientos y no significa nada, asi que se oculta.
+        var filaTotalGeneral = -1;
+        foreach (var celda in matriz.Cells)
+        {
+            if (celda is XRCrossTabCell c
+                && c.ColumnIndex == 0
+                && string.Equals(c.Text?.Trim(), "Grand Total", StringComparison.OrdinalIgnoreCase))
+            {
+                filaTotalGeneral = c.RowIndex;
+            }
         }
 
-        detailTable.Rows.Add(detailRow);
-        detailBand.Controls.Add(detailTable);
-
-        pageFooter.Controls.AddRange(
-        [
-            new XRPageInfo
+        foreach (var celda in matriz.Cells)
+        {
+            if (celda is not XRCrossTabCell c)
             {
-                BoundsF = new RectangleF(0f, 0f, 260f, 20f),
-                Font = new DXFont("Arial", 8f),
-                PageInfo = PageInfo.DateTime,
-                TextAlignment = TextAlignment.MiddleLeft,
-                TextFormatString = "Generado: {0:dd/MM/yyyy HH:mm}"
-            },
-            new XRPageInfo
-            {
-                BoundsF = new RectangleF(550f, 0f, 200f, 20f),
-                Font = new DXFont("Arial", 8f),
-                PageInfo = PageInfo.NumberOfTotal,
-                TextAlignment = TextAlignment.MiddleRight,
-                TextFormatString = "Pagina {0} de {1}"
+                continue;
             }
-        ]);
 
-        report.Bands.AddRange([reportHeader, pageHeader, detailBand, pageFooter]);
+            // La fuente se pone en la celda y no solo en el estilo: registrado o no, el estilo de
+            // la matriz no llega a las celdas ya generadas y todo salia con la serif por defecto.
+            c.Font = c.RowIndex == 0 || c.ColumnIndex == 0
+                ? new DXFont("Arial", 8.5f, DXFontStyle.Bold)
+                : new DXFont("Arial", 8.5f);
+
+            if (c.RowIndex == 0 && c.ColumnIndex == 0)
+            {
+                c.Text = string.Empty;
+            }
+            else if (filaTotalGeneral >= 0 && c.RowIndex == filaTotalGeneral)
+            {
+                c.Visible = false;
+            }
+            else if (string.Equals(c.Text?.Trim(), "Grand Total", StringComparison.OrdinalIgnoreCase))
+            {
+                c.Text = "Total patrimonio";
+            }
+        }
+
+        // Los negativos entre parentesis y sin decimales, igual que el resto del juego.
+        foreach (var celda in matriz.Cells)
+        {
+            if (celda is XRCrossTabCell dato && dato.DataLevel >= 0)
+            {
+                dato.TextFormatString = EstadoFinancieroLayout.FormatoMonto;
+            }
+        }
+
+        // La matriz va en el ENCABEZADO, no en el detalle. El detalle se imprime una vez por
+        // fila del origen y la matriz ya resume todas: puesta ahi, el estado salia repetido
+        // tantas veces como filas tuviera la consulta.
+        // La primera columna lleva los nombres de los movimientos -"Saldo al 31/12/2024"- y con el
+        // ancho por defecto salen cortados.
+        var primera = true;
+        foreach (var columna in matriz.ColumnDefinitions)
+        {
+            // La primera lleva los nombres de los movimientos -"Saldo al 31/12/2024"- y con el
+            // ancho por defecto salen cortados; las demas crecen segun la cifra.
+            if (primera)
+            {
+                columna.Width = 190;
+                primera = false;
+                continue;
+            }
+
+            columna.AutoWidthMode = AutoSizeMode.GrowOnly;
+        }
+
+        reportHeader.HeightF = 110f + matriz.HeightF + 20f;
+        reportHeader.Controls.Add(matriz);
+
+        report.Bands.Add(reportHeader);
         return report;
     }
 

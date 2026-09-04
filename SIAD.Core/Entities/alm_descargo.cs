@@ -80,9 +80,22 @@ public partial class alm_descargo : ICompanyScopedEntity
     /// </summary>
     public string origen { get; set; } = OrigenDocumento.Siad;
 
+    /// <summary>Cabecera del documento nuevo (Fase 6). NULL en las líneas del histórico SIMAFI.</summary>
+    public int? descargo_hdr_id { get; set; }
+
+    /// <summary>
+    /// LÍNEA de <see cref="alm_requisicion"/> que sirve este renglón (FK compuesta tenant-safe). NULL
+    /// en un descargo directo (sin requisición) y en el histórico (que enlaza por
+    /// <see cref="numero_requisicion"/>).
+    /// </summary>
+    public int? requisicion_id { get; set; }
+
     /// <summary>Artículo del descargo (FK a alm_articulo). El código legacy se conserva como referencia.</summary>
     public virtual alm_articulo? articulo_ref { get; set; }
 
     /// <summary>Bodega de salida del descargo (FK a alm_bodega).</summary>
     public virtual alm_bodega? bodega_ref { get; set; }
+
+    /// <summary>Cabecera del documento nuevo (Fase 6). NULL en el histórico.</summary>
+    public virtual alm_descargo_hdr? cabecera { get; set; }
 }

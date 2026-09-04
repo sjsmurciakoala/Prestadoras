@@ -32,6 +32,7 @@ public static class AuditableMaestros
         new("prv_proveedor_cuenta_bancaria",  "Cuentas bancarias de proveedor", "Proveedores"),
         new("prv_proveedor_contacto",         "Contactos de proveedor",         "Proveedores"),
         new("prv_tipo_contacto",              "Tipos de contacto",              "Proveedores"),
+        new("cfg_formato_fiscal",             "Formatos fiscales",              "Configuración"),
     ];
 
     private static readonly HashSet<string> _tablas =

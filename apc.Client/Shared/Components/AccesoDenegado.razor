@@ -1,0 +1,44 @@
+@inject NavigationManager NavigationManager
+
+@* Se muestra cuando el usuario SÍ inició sesión pero su rol no alcanza para la página.
+   Antes estos casos caían en RedirectToLogin, que devolvía al login a alguien ya autenticado
+   y parecía que la sesión se había caído. *@
+
+<div class="d-flex justify-content-center align-items-center" style="min-height: 60vh;">
+    <div class="text-center p-4" style="max-width: 32rem;">
+        <div class="mb-3 text-warning">
+            <i class="bi bi-shield-lock-fill" style="font-size: 3.5rem;"></i>
+        </div>
+        <h4 class="fw-bold mb-2">No tienes acceso a esta opción</h4>
+        <p class="text-muted mb-1">
+            Tu sesión está activa, pero tu rol no incluye el permiso necesario para
+            <strong>@RutaActual</strong>.
+        </p>
+        <p class="text-muted small mb-4">
+            Si necesitas entrar aquí, pídele a un administrador que agregue el permiso a tu rol
+            desde Configuración → Roles y permisos.
+        </p>
+        <div class="d-flex justify-content-center gap-2">
+            <DxButton Text="Ir al inicio"
+                      IconCssClass="bi bi-house"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      Click="@(() => NavigationManager.NavigateTo("/"))" />
+            <DxButton Text="Cerrar sesión"
+                      IconCssClass="bi bi-box-arrow-right"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      Click="@(() => NavigationManager.NavigateTo("/Account/Logout", forceLoad: true))" />
+        </div>
+    </div>
+</div>
+
+@code {
+    private string RutaActual
+    {
+        get
+        {
+            var relativa = NavigationManager.ToBaseRelativePath(NavigationManager.Uri).Split('?', '#')[0];
+            return string.IsNullOrWhiteSpace(relativa) ? "esta página" : "/" + relativa;
+        }
+    }
+}

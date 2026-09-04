@@ -6,8 +6,8 @@ public sealed class AbogadoEditDto
 {
     public int? Id { get; set; }
 
-    [Required(ErrorMessage = "El código es obligatorio.")]
-    [StringLength(50, ErrorMessage = "El código no puede superar los 50 caracteres.")]
+    [Required(ErrorMessage = "El cÃ³digo es obligatorio.")]
+    [StringLength(50, ErrorMessage = "El cÃ³digo no puede superar los 50 caracteres.")]
     public string Codigo { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "El nombre corto es obligatorio.")]
@@ -17,7 +17,7 @@ public sealed class AbogadoEditDto
     [StringLength(300, ErrorMessage = "El nombre largo no puede superar los 300 caracteres.")]
     public string? NombreLargo { get; set; }
 
-    [StringLength(11, ErrorMessage = "El teléfono no puede superar los 11 caracteres.")]
+    [StringLength(11, ErrorMessage = "El telÃ©fono no puede superar los 11 caracteres.")]
     public string? Telefono { get; set; }
 
     [StringLength(100, ErrorMessage = "La cuenta contable no puede superar los 100 caracteres.")]

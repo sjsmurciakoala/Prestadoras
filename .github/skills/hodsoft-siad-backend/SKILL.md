@@ -25,7 +25,7 @@ Usa esta skill para tocar backend sin mezclar responsabilidades ni romper tenanc
 - Para datos tenant-aware, resuelve la empresa con `ICurrentCompanyService`.
 - Usa `ModuleAuthorize` o politicas basadas en `PermissionNames`.
 - Manten las firmas async con `CancellationToken` donde el modulo ya las usa.
-- Usa `SiadDbContext` como via principal de acceso a datos; usa Dapper solo cuando el propio flujo ya siga ese patron y el caso lo justifique.
+- **No uses LINQ.** Todo acceso a datos va por stored procedures, funciones y vistas de Postgres, invocados con Dapper o `NpgsqlCommand`. Ver la skill `hodsoft-sin-linq`. `SiadDbContext` queda para conexion/transaccion y tenancy, no para construir consultas.
 - No dupliques logica de negocio entre controller y servicio.
 
 ## Tenancy

@@ -1,1 +1,0 @@
-// Este archivo debe ser eliminado - solo placeholder temporal

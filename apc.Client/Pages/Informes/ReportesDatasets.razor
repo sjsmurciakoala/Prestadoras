@@ -8,6 +8,7 @@
 @using SIAD.Core.DTOs.Informes
 @inject InformesClient InformesClient
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IAuthorizationService AuthorizationService
 @inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Datasets de Reportes</PageTitle>
@@ -522,7 +523,7 @@
     {
         var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         var user = state.User;
-        allowSql = user.IsInRole(RoleNames.Admin) || user.IsInRole(RoleNames.SuperAdministrador);
+        allowSql = (await AuthorizationService.AuthorizeAsync(user, PermissionNames.Reporteria.SqlPersonalizado)).Succeeded;
     }
 
     private void BuildSourceTypeOptions()

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using SIAD.Core.DTOs.Retenciones;
 using SIAD.Core.Utilities;
 
 namespace SIAD.Core.DTOs.Presupuesto;
@@ -246,6 +247,13 @@ public sealed class ProcesarOrdenPagoDirectoDto
     public string MetodoPago { get; set; } = string.Empty;
 
     public List<PartidaLineaOrdenPagoDto> Lineas { get; set; } = new();
+
+    /// <summary>
+    /// Retenciones aplicadas en este pago, en paralelo a <see cref="Lineas"/> (F4). NO altera la
+    /// partida (esa se arma con Lineas); el backend la usa para el registro fiscal hdr/dtl y valida
+    /// que Σ Monto == Σ crédito de las cuentas de retención en Lineas.
+    /// </summary>
+    public List<RetencionAplicadaDto> Retenciones { get; set; } = new();
 
     public string Usuario { get; set; } = string.Empty;
 }

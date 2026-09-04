@@ -8,22 +8,21 @@
 @inject IdentityRedirectManager RedirectManager
 @inject ILogger<Disable2fa> Logger
 
-<PageTitle>Disable two-factor authentication (2FA)</PageTitle>
+<PageTitle>Desactivar la verificación en dos pasos (2FA)</PageTitle>
 
 <StatusMessage />
 
 <div class="title title-secondary">
-    <div class="title-content-text-secondary">Disable two-factor authentication (2FA)</div>
+    <div class="title-content-text-secondary">Desactivar la verificación en dos pasos (2FA)</div>
 </div>
 <span>This action only disables 2FA.</span>
 <span>
-    Disabling 2FA does not change the keys used in authenticator apps. If you wish to change the key
-    used in an authenticator app you should <a href="Account/Manage/ResetAuthenticator">reset your authenticator keys.</a>
+    Desactivar la verificación en dos pasos no cambia la clave que usa la aplicación de autenticación. Si quiere cambiarla, debe <a href="Account/Manage/ResetAuthenticator">reset your authenticator keys.</a>
 </span>
 <div class="block-content">
     <form @formname="disable-2fa" @onsubmit="OnSubmitAsync" method="post">
         <AntiforgeryToken />
-        <DxButton CssClass="w-100" Text="Disable 2FA" RenderStyle="ButtonRenderStyle.Danger" SubmitFormOnClick="true"></DxButton>
+        <DxButton CssClass="w-100" Text="Desactivar 2FA" RenderStyle="ButtonRenderStyle.Danger" SubmitFormOnClick="true"></DxButton>
     </form>
 </div>
 

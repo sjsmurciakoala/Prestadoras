@@ -1,0 +1,1397 @@
+<title>Cuentas por pagar unificadas</title>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body, h1, h2, h3, h4, p, figure, table, ul, ol, li { margin: 0; padding: 0; }
+  ul, ol { list-style: none; }
+  button { font: inherit; color: inherit; }
+  table { border-collapse: collapse; }
+
+  :root {
+    --ground:      #f3f5f6;
+    --surface:     #ffffff;
+    --surface-2:   #eceff1;
+    --line:        #d8dee1;
+    --line-soft:   #e7ebed;
+    --ink:         #16222b;
+    --ink-2:       #4a5a64;
+    --ink-3:       #74858e;
+    --accent:      #0f6e64;
+    --accent-soft: #e2efec;
+    --ok:          #1e7a4d;
+    --ok-soft:     #e3f2e8;
+    --warn:        #b0761a;
+    --warn-soft:   #fbf0dc;
+    --bad:         #ae3a31;
+    --bad-soft:    #fbe6e3;
+    --shadow:      0 1px 2px rgba(22,34,43,.06), 0 8px 24px -16px rgba(22,34,43,.35);
+
+    /* las dos identidades de documento: es la única distinción que el ojo debe hacer */
+    --fac:      #2f6f9f;   --fac-soft: #e4eef6;
+    --com:      #9a6516;   --com-soft: #f7ecd9;
+
+    --serif: "Palatino Linotype", Palatino, "Iowan Old Style", Georgia, ui-serif, serif;
+    --sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0e161b;
+      --surface:     #16222b;
+      --surface-2:   #1d2c36;
+      --line:        #2c3d48;
+      --line-soft:   #24343e;
+      --ink:         #e4ecef;
+      --ink-2:       #a9bcc5;
+      --ink-3:       #7d939d;
+      --accent:      #45b3a4;
+      --accent-soft: #123832;
+      --ok:          #5cbc86;
+      --ok-soft:     #12301f;
+      --warn:        #d9a441;
+      --warn-soft:   #33260e;
+      --bad:         #e0736a;
+      --bad-soft:    #371a17;
+      --shadow:      0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+      --fac:      #6fa8d0;   --fac-soft: #12262f;
+      --com:      #d9a441;   --com-soft: #31240d;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:      #0e161b;
+    --surface:     #16222b;
+    --surface-2:   #1d2c36;
+    --line:        #2c3d48;
+    --line-soft:   #24343e;
+    --ink:         #e4ecef;
+    --ink-2:       #a9bcc5;
+    --ink-3:       #7d939d;
+    --accent:      #45b3a4;
+    --accent-soft: #123832;
+    --ok:          #5cbc86;
+    --ok-soft:     #12301f;
+    --warn:        #d9a441;
+    --warn-soft:   #33260e;
+    --bad:         #e0736a;
+    --bad-soft:    #371a17;
+    --shadow:      0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+    --fac:      #6fa8d0;   --fac-soft: #12262f;
+    --com:      #d9a441;   --com-soft: #31240d;
+  }
+
+  body { background: var(--ground); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.5; }
+
+  /* ---------- barra superior ---------- */
+  .topbar { position: sticky; top: 0; z-index: 40; background: var(--surface); border-bottom: 1px solid var(--line); }
+  .topbar-inner { max-width: 1320px; margin: 0 auto; padding: 11px 26px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  .mark { display: flex; align-items: center; gap: 11px; font-weight: 600; font-size: 14.5px; }
+  .mark-badge { width: 29px; height: 29px; border-radius: 8px; background: var(--accent); color: #fff; display: grid; place-items: center; font-family: var(--mono); font-size: 11.5px; font-weight: 700; letter-spacing: -.03em; }
+  .mark small { display: block; font-size: 11px; color: var(--ink-3); font-weight: 500; }
+  .ctx { margin-left: auto; display: flex; gap: 24px; flex-wrap: wrap; }
+  .ctx div { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+  .ctx strong { display: block; font-size: 13px; letter-spacing: 0; text-transform: none; color: var(--ink); font-weight: 600; }
+
+  .wrap { max-width: 1320px; margin: 0 auto; padding: 0 26px 60px; }
+
+  /* ---------- pestañas ---------- */
+  .tabs { display: flex; gap: 2px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin: 22px 0 26px; }
+  .tab { background: none; border: 0; cursor: pointer; padding: 10px 16px; margin-bottom: -1px; color: var(--ink-2); font-size: 13.5px; font-weight: 500; border-bottom: 2px solid transparent; border-radius: 4px 4px 0 0; transition: color .15s, background .15s, border-color .15s; }
+  .tab:hover { color: var(--ink); background: var(--surface-2); }
+  .tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .panel[hidden] { display: none; }
+
+  /* ---------- tipografía ---------- */
+  .page-title { font-family: var(--serif); font-weight: 600; font-size: 27px; line-height: 1.2; letter-spacing: -.01em; text-wrap: balance; }
+  .page-sub { color: var(--ink-2); font-size: 14px; max-width: 74ch; margin-top: 6px; }
+  .eyebrow { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+  h3.sec { font-family: var(--serif); font-size: 17px; font-weight: 600; }
+  code { font-family: var(--mono); font-size: .88em; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; color: var(--ink-2); }
+
+  /* ---------- tarjetas ---------- */
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); }
+  .card-head { padding: 14px 18px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .card-head p { color: var(--ink-3); font-size: 12.5px; }
+  .card-body { padding: 18px; }
+  .stack { display: flex; flex-direction: column; gap: 22px; }
+
+  /* ---------- KPI ---------- */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+  .kpi { padding: 15px 18px; position: relative; }
+  .kpi .label { font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; display: flex; align-items: center; gap: 7px; }
+  .kpi .value { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 25px; font-weight: 600; letter-spacing: -.02em; margin-top: 6px; }
+  .kpi .value small { font-size: 14px; color: var(--ink-3); font-weight: 500; }
+  .kpi .foot { font-size: 12.5px; color: var(--ink-2); margin-top: 4px; }
+  .kpi .rail { position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 3px; }
+
+  /* ---------- barra de herramientas del grid ---------- */
+  .toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; padding: 13px 18px; border-bottom: 1px solid var(--line-soft); }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+  .seg button { border: 0; background: none; cursor: pointer; padding: 7px 13px; font-size: 13px; font-weight: 500; color: var(--ink-2); display: flex; align-items: center; gap: 7px; border-right: 1px solid var(--line); transition: background .15s, color .15s; }
+  .seg button:last-child { border-right: 0; }
+  .seg button:hover { background: var(--surface-2); color: var(--ink); }
+  .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .seg .tally { font-family: var(--mono); font-size: 11px; background: var(--surface-2); border-radius: 20px; padding: 1px 6px; color: var(--ink-3); }
+  .seg button[aria-pressed="true"] .tally { background: var(--surface); color: inherit; }
+  .seg .tick { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+
+  .control { background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 7px; padding: 7px 11px; font-size: 13.5px; font-family: inherit; }
+  .control:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 7px; padding: 7px 13px; font-size: 13.5px; font-weight: 500; cursor: pointer; transition: background .15s, border-color .15s; }
+  .btn:hover { background: var(--surface-2); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.sm { padding: 4px 10px; font-size: 12.5px; border-radius: 6px; }
+  .btn[disabled] { opacity: .45; cursor: not-allowed; }
+  .switch { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ink-2); cursor: pointer; }
+  .push { margin-left: auto; display: flex; gap: 9px; align-items: center; flex-wrap: wrap; }
+  .total-inline { font-size: 12.5px; color: var(--ink-3); }
+  .total-inline b { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 14px; color: var(--ink); }
+
+  /* ---------- grid ---------- */
+  .table-scroll { overflow-x: auto; }
+  table.grid { width: 100%; font-size: 13px; min-width: 1180px; }
+  table.grid th { text-align: left; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; background: var(--surface); position: sticky; top: 52px; z-index: 2; }
+  table.grid td { padding: 9px 12px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+  table.grid tbody tr:hover td { background: var(--surface-2); }
+  table.grid tbody tr.paid td { color: var(--ink-3); }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  .name { font-weight: 600; display: block; }
+  .sub { display: block; font-size: 11.5px; color: var(--ink-3); font-weight: 400; }
+  .docnum { font-family: var(--mono); font-size: 12px; }
+  .z { color: var(--ink-3); opacity: .55; }
+
+  /* la franja de tipo: se lee antes que cualquier texto */
+  td.tipo { padding-left: 0; }
+  .tipo-cell { display: flex; align-items: center; gap: 9px; }
+  .stripe { width: 4px; align-self: stretch; min-height: 30px; border-radius: 0 3px 3px 0; flex: none; }
+  tr[data-tipo="FAC"] .stripe { background: var(--fac); }
+  tr[data-tipo="COM"] .stripe { background: var(--com); }
+
+  .chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 20px; font-size: 11.5px; font-weight: 600; letter-spacing: .02em; white-space: nowrap; }
+  .chip.fac { background: var(--fac-soft); color: var(--fac); }
+  .chip.com { background: var(--com-soft); color: var(--com); }
+  .chip.ok { background: var(--ok-soft); color: var(--ok); }
+  .chip.warn { background: var(--warn-soft); color: var(--warn); }
+  .chip.bad { background: var(--bad-soft); color: var(--bad); }
+  .chip.neutral { background: var(--surface-2); color: var(--ink-2); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+
+  .venc { display: block; font-size: 11.5px; margin-top: 1px; }
+  .venc.bad { color: var(--bad); font-weight: 600; }
+  .venc.warn { color: var(--warn); }
+  .venc.ok { color: var(--ok); }
+  .venc.z { color: var(--ink-3); }
+
+  /* fila de grupo cuando se agrupa por tipo */
+  tr.group td { background: var(--surface-2); font-weight: 600; font-size: 12.5px; padding: 7px 12px; border-bottom: 1px solid var(--line); }
+  tr.group .g-total { float: right; font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 700; }
+
+  tfoot td { padding: 11px 12px; border-top: 2px solid var(--line); font-weight: 700; background: var(--surface-2); }
+
+  /* acciones */
+  .acts { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+  .ico { border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); width: 27px; height: 27px; border-radius: 6px; display: grid; place-items: center; cursor: pointer; font-size: 13px; line-height: 1; transition: background .15s, color .15s, border-color .15s; }
+  .ico:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .ico:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .menu-wrap { position: relative; }
+  .menu { position: absolute; right: 0; top: 31px; z-index: 20; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; box-shadow: var(--shadow); min-width: 216px; padding: 6px; display: flex; flex-direction: column; }
+  .menu[hidden] { display: none; }
+  .menu b { font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); padding: 7px 10px 4px; }
+  .menu button { border: 0; background: none; text-align: left; padding: 7px 10px; border-radius: 6px; font-size: 13px; cursor: pointer; color: var(--ink-2); display: flex; align-items: center; gap: 9px; }
+  .menu button:hover { background: var(--surface-2); color: var(--ink); }
+  .menu button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .menu .sep { height: 1px; background: var(--line-soft); margin: 5px 2px; }
+  .menu .tag { margin-left: auto; font-size: 10px; letter-spacing: .05em; text-transform: uppercase; font-weight: 700; }
+  .menu .tag.fac { color: var(--fac); }
+  .menu .tag.com { color: var(--com); }
+
+  .empty { padding: 34px; text-align: center; color: var(--ink-3); font-size: 13.5px; }
+
+  /* ---------- panel de pago ---------- */
+  .scrim { position: fixed; inset: 0; background: rgba(10,20,26,.42); z-index: 50; }
+  .scrim[hidden], .drawer[hidden] { display: none; }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(452px, 100%); background: var(--surface); border-left: 1px solid var(--line); z-index: 51; display: flex; flex-direction: column; box-shadow: -18px 0 40px -28px rgba(0,0,0,.6); }
+  .drawer header { padding: 16px 20px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: flex-start; gap: 12px; }
+  .drawer header h4 { font-family: var(--serif); font-size: 17px; font-weight: 600; }
+  .drawer header .sub { font-size: 12.5px; }
+  .drawer .body { padding: 18px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
+  .drawer footer { margin-top: auto; padding: 14px 20px; border-top: 1px solid var(--line-soft); display: flex; gap: 9px; justify-content: flex-end; }
+  .fld { display: flex; flex-direction: column; gap: 5px; }
+  .fld label { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+  .fld .control { width: 100%; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .saldo-box { display: flex; justify-content: space-between; align-items: center; padding: 11px 14px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--line-soft); }
+  .saldo-box span { font-size: 12px; color: var(--ink-3); letter-spacing: .04em; text-transform: uppercase; font-weight: 600; }
+  .saldo-box b { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 19px; }
+  .note { font-size: 12.5px; color: var(--ink-2); border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 10px 12px; border-radius: 0 7px 7px 0; }
+  .note.fac { border-color: var(--fac); background: var(--fac-soft); }
+  .note.com { border-color: var(--com); background: var(--com-soft); }
+  .drawer .x { margin-left: auto; border: 0; background: none; cursor: pointer; color: var(--ink-3); font-size: 19px; line-height: 1; padding: 2px 5px; border-radius: 5px; }
+  .drawer .x:hover { background: var(--surface-2); color: var(--ink); }
+
+  /* ---------- selección múltiple ---------- */
+  th.sel, td.sel { width: 38px; padding-right: 0; }
+  .chk { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+  .chk:disabled { cursor: not-allowed; opacity: .3; }
+  table.grid tbody tr.picked td { background: var(--accent-soft); }
+  table.grid tbody tr.picked:hover td { background: var(--accent-soft); }
+
+  .selbar { position: sticky; bottom: 0; z-index: 30; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 12px 18px; background: var(--surface); border-top: 1px solid var(--line); box-shadow: 0 -10px 26px -20px rgba(0,0,0,.55); border-radius: 0 0 10px 10px; }
+  .selbar[hidden] { display: none; }
+  .selbar .count { font-size: 13.5px; font-weight: 600; }
+  .selbar .count small { display: block; font-size: 12px; color: var(--ink-3); font-weight: 500; }
+  .selbar .amount { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 19px; font-weight: 700; }
+  .selbar .amount small { display: block; font-family: var(--sans); font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+  .selbar .mixnote { display: flex; align-items: center; gap: 7px; font-size: 12.5px; padding: 6px 11px; border-radius: 7px; background: var(--surface-2); color: var(--ink-2); }
+  .selbar .mixnote.multi { background: var(--warn-soft); color: var(--warn); font-weight: 600; }
+
+  /* ---------- lote de pago ---------- */
+  .drawer.wide { width: min(920px, 100%); }
+  .lote-prov { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+  .lote-prov .ph { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 13px; background: var(--surface-2); border-bottom: 1px solid var(--line-soft); }
+  .lote-prov .ph .pn { font-weight: 600; font-size: 13.5px; }
+  .lote-prov .ph .pd { font-size: 12px; color: var(--ink-3); }
+  .lote-prov .ph .pay { margin-left: auto; font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 700; font-size: 14.5px; }
+  table.lote { width: 100%; font-size: 12.5px; }
+  table.lote th { text-align: left; font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; padding: 7px 12px; border-bottom: 1px solid var(--line-soft); }
+  table.lote th.r, table.lote td.r { text-align: right; }
+  table.lote td { padding: 7px 12px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+  table.lote tr:last-child td { border-bottom: 0; }
+  table.lote .docnum { font-size: 11.5px; }
+  .mini { width: 108px; text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+  .mini:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .mini.over { border-color: var(--bad); color: var(--bad); }
+
+  .modes { display: flex; gap: 9px; flex-wrap: wrap; }
+  .mode { flex: 1 1 170px; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; cursor: pointer; font-size: 12.5px; display: flex; flex-direction: column; gap: 2px; background: var(--surface); position: relative; }
+  .mode input { position: absolute; opacity: 0; pointer-events: none; }
+  .mode b { font-size: 13px; font-weight: 600; }
+  .mode span { color: var(--ink-3); }
+  .mode.on { border-color: var(--accent); background: var(--accent-soft); }
+  .mode.on span { color: var(--ink-2); }
+  .mode:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .totrow { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; padding: 3px 0; color: var(--ink-2); }
+  .totrow b { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+  .totrow.grand { border-top: 1px solid var(--line); margin-top: 5px; padding-top: 9px; font-size: 15px; font-weight: 700; color: var(--ink); }
+
+  .done { display: flex; flex-direction: column; gap: 14px; align-items: center; text-align: center; padding: 10px 0 2px; }
+  .done .tick-big { width: 46px; height: 46px; border-radius: 50%; background: var(--ok-soft); color: var(--ok); display: grid; place-items: center; font-size: 23px; }
+  .done h5 { font-family: var(--serif); font-size: 18px; font-weight: 600; }
+  .done p { font-size: 13px; color: var(--ink-2); max-width: 46ch; }
+  ul.recibos { display: flex; flex-direction: column; gap: 8px; width: 100%; text-align: left; }
+  ul.recibos li { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; font-size: 12.5px; }
+  ul.recibos li .r-n { font-family: var(--mono); font-weight: 600; }
+  ul.recibos li .r-m { margin-left: auto; font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600; }
+
+  /* ---------- comparativa ---------- */
+  table.compare { width: 100%; font-size: 13px; min-width: 760px; }
+  table.compare th { text-align: left; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+  table.compare th.fac-h { color: var(--fac); }
+  table.compare th.com-h { color: var(--com); }
+  table.compare td { padding: 11px 14px; border-bottom: 1px solid var(--line-soft); vertical-align: top; color: var(--ink-2); }
+  table.compare td:first-child { color: var(--ink); font-weight: 600; width: 168px; }
+  table.compare tr:hover td { background: var(--surface-2); }
+  .verdict { display: block; margin-top: 5px; font-size: 12px; color: var(--ink-3); }
+  .verdict b { color: var(--accent); font-weight: 600; }
+
+  /* ---------- arquitectura ---------- */
+  .flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(232px, 1fr)); gap: 14px; }
+  .node { border: 1px solid var(--line); border-radius: 9px; padding: 15px 16px; background: var(--surface); display: flex; flex-direction: column; gap: 7px; }
+  .node.n-fac { border-top: 3px solid var(--fac); }
+  .node.n-com { border-top: 3px solid var(--com); }
+  .node.n-one { border-top: 3px solid var(--accent); }
+  .node h4 { font-size: 13.5px; font-weight: 600; }
+  .node p { font-size: 12.5px; color: var(--ink-2); }
+  ul.notes { display: flex; flex-direction: column; gap: 10px; }
+  ul.notes li { display: flex; gap: 10px; font-size: 13px; color: var(--ink-2); }
+  ul.notes li::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); margin-top: 8px; flex: none; }
+  ul.notes b { color: var(--ink); font-weight: 600; }
+  ol.decisiones { display: flex; flex-direction: column; gap: 13px; counter-reset: d; }
+  ol.decisiones li { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: baseline; font-size: 13px; }
+  ol.decisiones li::before { counter-increment: d; content: "D" counter(d); font-family: var(--mono); font-size: 11.5px; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 5px; padding: 2px 7px; }
+  ol.decisiones b { font-weight: 600; }
+  ol.decisiones span { color: var(--ink-2); }
+  ol.decisiones em { font-style: normal; color: var(--ink-3); }
+
+  .fases { display: flex; flex-direction: column; gap: 11px; }
+  .fase { display: grid; grid-template-columns: 92px 1fr; gap: 14px; align-items: start; padding: 13px 0; border-bottom: 1px solid var(--line-soft); }
+  .fase:last-child { border-bottom: 0; }
+  .fase .f-lbl { font-family: var(--mono); font-size: 11.5px; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 6px; padding: 3px 8px; text-align: center; }
+  .fase h4 { font-size: 13.5px; font-weight: 600; }
+  .fase p { font-size: 12.5px; color: var(--ink-2); margin-top: 3px; }
+
+  .footnote { font-size: 12px; color: var(--ink-3); margin-top: 26px; text-align: center; }
+
+  @media (max-width: 720px) {
+    .wrap, .topbar-inner { padding-left: 16px; padding-right: 16px; }
+    .row2 { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="mark">
+      <span class="mark-badge" aria-hidden="true">CxP</span>
+      <span>Cuentas por pagar<small>Prototipo · datos de ejemplo</small></span>
+    </div>
+    <div class="ctx">
+      <div>Empresa<strong>MERENDON</strong></div>
+      <div>Módulo<strong>Compras · Proveedores</strong></div>
+      <div>Corte<strong>22/08/2026</strong></div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <div style="padding-top:26px">
+    <p class="eyebrow">Propuesta de pantalla</p>
+    <h1 class="page-title">Facturas y compromisos en una sola vista</h1>
+    <p class="page-sub">
+      Hoy la deuda con un proveedor vive en dos pantallas que no se hablan: <b>Pagos a proveedores</b>
+      (facturas de compra) y <b>Compromisos de proveedor</b>. Son el mismo hecho —le debemos dinero a alguien—
+      y se pagan igual. Esta propuesta las funde en un grid único donde cada fila es un <b>documento por pagar</b>,
+      y el tipo (factura o compromiso) es una columna más: se filtra, se agrupa y se totaliza por él.
+      Las cifras son de ejemplo; la mecánica es la real.
+    </p>
+  </div>
+
+  <nav class="tabs" role="tablist" aria-label="Secciones del prototipo">
+    <button class="tab" role="tab" id="t-vista" aria-controls="p-vista" aria-selected="true">Vista unificada</button>
+    <button class="tab" role="tab" id="t-lote" aria-controls="p-lote" aria-selected="false">Pago en lote</button>
+    <button class="tab" role="tab" id="t-dif" aria-controls="p-dif" aria-selected="false">En qué se diferencian</button>
+    <button class="tab" role="tab" id="t-arq" aria-controls="p-arq" aria-selected="false">Cómo se arma</button>
+  </nav>
+
+  <!-- ================= VISTA UNIFICADA ================= -->
+  <section class="panel stack" id="p-vista" role="tabpanel" aria-labelledby="t-vista">
+
+    <div class="kpis">
+      <div class="card kpi">
+        <span class="rail" style="background:var(--ink-3)"></span>
+        <div class="label">Saldo por pagar</div>
+        <div class="value" id="k-total">L 0<small>.00</small></div>
+        <div class="foot" id="k-total-sub">— documentos con saldo</div>
+      </div>
+      <div class="card kpi">
+        <span class="rail" style="background:var(--fac)"></span>
+        <div class="label"><span class="dot" style="color:var(--fac)"></span>Facturas de compra</div>
+        <div class="value" id="k-fac">L 0<small>.00</small></div>
+        <div class="foot" id="k-fac-sub">—</div>
+      </div>
+      <div class="card kpi">
+        <span class="rail" style="background:var(--com)"></span>
+        <div class="label"><span class="dot" style="color:var(--com)"></span>Compromisos</div>
+        <div class="value" id="k-com">L 0<small>.00</small></div>
+        <div class="foot" id="k-com-sub">—</div>
+      </div>
+      <div class="card kpi">
+        <span class="rail" style="background:var(--bad)"></span>
+        <div class="label">Vencido</div>
+        <div class="value" id="k-venc" style="color:var(--bad)">L 0<small>.00</small></div>
+        <div class="foot" id="k-venc-sub">—</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="Filtrar por tipo de documento">
+          <button type="button" data-tipo="TODOS" aria-pressed="true">Todos <span class="tally" id="tally-todos">14</span></button>
+          <button type="button" data-tipo="FAC" aria-pressed="false"><span class="tick" style="background:var(--fac)"></span>Facturas <span class="tally" id="tally-fac">8</span></button>
+          <button type="button" data-tipo="COM" aria-pressed="false"><span class="tick" style="background:var(--com)"></span>Compromisos <span class="tally" id="tally-com">6</span></button>
+        </div>
+
+        <input class="control" id="q" type="search" placeholder="Proveedor, documento o concepto…" style="min-width:250px" aria-label="Buscar">
+
+        <select class="control" id="f-estado" aria-label="Estado">
+          <option value="">Todos los estados</option>
+          <option value="1">Pendiente</option>
+          <option value="2">Parcial</option>
+          <option value="3">Pagada</option>
+        </select>
+
+        <label class="switch"><input type="checkbox" id="f-venc"> Solo vencidos</label>
+        <label class="switch"><input type="checkbox" id="f-group"> Agrupar por tipo</label>
+
+        <div class="push">
+          <span class="total-inline">Saldo en pantalla: <b id="t-saldo">L 0.00</b></span>
+          <button class="btn sm" type="button">Exportar</button>
+          <button class="btn sm primary" type="button">Nuevo compromiso</button>
+        </div>
+      </div>
+
+      <div class="table-scroll">
+        <table class="grid">
+          <thead>
+            <tr>
+              <th class="sel"><input type="checkbox" class="chk" id="chk-all" aria-label="Seleccionar todo lo mostrado"></th>
+              <th style="width:132px">Tipo</th>
+              <th style="width:172px">Documento</th>
+              <th>Proveedor / concepto</th>
+              <th style="width:104px">Fecha</th>
+              <th style="width:126px">Vence</th>
+              <th class="num" style="width:118px">Total</th>
+              <th class="num" style="width:112px">Abonado</th>
+              <th class="num" style="width:122px">Saldo</th>
+              <th style="width:108px">Estado</th>
+              <th style="width:132px"></th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+          <tfoot>
+            <tr>
+              <td colspan="6" style="text-align:right">Totales de lo mostrado</td>
+              <td class="num" id="f-total">—</td>
+              <td class="num" id="f-abonado">—</td>
+              <td class="num" id="f-saldo">—</td>
+              <td colspan="2"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div class="selbar" id="selbar" hidden>
+        <div class="count" id="sel-count">0 documentos<small>—</small></div>
+        <div class="amount" id="sel-amount">L 0.00<small>Saldo seleccionado</small></div>
+        <div class="mixnote" id="sel-mix">—</div>
+        <div class="push">
+          <button class="btn" type="button" id="sel-clear">Quitar selección</button>
+          <button class="btn primary" type="button" id="sel-pay">Pagar seleccionados</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h3 class="sec">Lo que hace que funcionen como uno solo</h3>
+        <p>las cuatro decisiones visuales del grid</p>
+      </div>
+      <div class="card-body">
+        <ul class="notes">
+          <li><b>Franja de color a la izquierda de la fila.</b> Azul = factura de compra, ocre = compromiso. Se lee antes que cualquier texto, incluso con el grid agrupado o filtrado, y no gasta una columna.</li>
+          <li><b>Número con prefijo hablante.</b> La factura muestra su número SAR (o <code>FAC-000123</code> si no lo tiene); el compromiso, <code>OPD-00412</code>. Nunca conviven dos documentos distintos con el mismo número en pantalla.</li>
+          <li><b>Mismo lenguaje de saldo para los dos.</b> Total, abonado, saldo y estado (Pendiente / Parcial / Pagada) salen del mismo cálculo, así que la fila se lee igual venga de donde venga.</li>
+          <li><b>El botón principal es «Pagar» para los dos</b>; lo que cambia es el formulario que abre y el menú de acciones de la fila, que solo ofrece lo que ese tipo de documento sabe hacer. Pruebe «Pagar» y «⋯» en una factura y en un compromiso.</li>
+          <li><b>Y se pueden pagar varios de una vez</b>, mezclando facturas y compromisos: marque las casillas de la izquierda y use «Pagar seleccionados» en la barra que aparece abajo. La pestaña <b>Pago en lote</b> explica las reglas.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= PAGO EN LOTE ================= -->
+  <section class="panel stack" id="p-lote" role="tabpanel" aria-labelledby="t-lote" hidden>
+    <div class="card">
+      <div class="card-head">
+        <h3 class="sec">Pagar varios documentos en una sola operación</h3>
+        <p>facturas y compromisos mezclados, con un desembolso por proveedor</p>
+      </div>
+      <div class="card-body stack" style="gap:16px">
+        <p style="font-size:13.5px;color:var(--ink-2);max-width:74ch">
+          Una vez que las dos deudas viven en el mismo grid, pagarlas juntas deja de ser un problema de pantallas
+          y pasa a ser uno de reglas: <b>a quién se le paga</b>, <b>cuánto le toca a cada documento</b> y
+          <b>qué se emite</b>. Así lo resolvería:
+        </p>
+        <ul class="notes">
+          <li><b>Un desembolso por proveedor, no por documento.</b> Un cheque se gira a nombre de alguien: si el lote lleva documentos de tres proveedores, salen tres cheques (o tres transferencias), aunque sea un solo clic. Dentro de cada proveedor, da igual si es factura o compromiso: todo entra en el mismo cheque.</li>
+          <li><b>Cada documento conserva su propio pago.</b> El lote no crea un pago gigante: registra un abono por documento, con su comprobante, exactamente como si los hubiera pagado uno por uno. Por eso el historial, la anulación y la contabilidad siguen funcionando igual.</li>
+          <li><b>Todo o nada.</b> El lote se registra dentro de una sola transacción: si un documento falla —porque alguien lo pagó mientras tanto, o el banco no tiene fondos configurados— no se registra ninguno y la pantalla dice cuál falló.</li>
+          <li><b>Tres formas de repartir el dinero:</b> pagar el saldo completo de lo seleccionado; indicar cuánto hay disponible y que se aplique del más vencido al más nuevo, dejando el último parcial; o escribir a mano cuánto lleva cada documento.</li>
+          <li><b>Las retenciones se calculan por documento</b>, como hoy: el saldo de cada uno baja por el monto bruto y del banco sale el neto del lote.</li>
+          <li><b>El compromiso que queda saldado se marca como procesado</b>, igual que si hubiera pasado por «emitir pago»; el que queda a medias sigue vivo con su saldo (decisión D8).</li>
+        </ul>
+        <div class="note" style="border-radius:0 7px 7px 0">
+          Pruébelo en la pestaña <b>Vista unificada</b>: marque dos facturas y un compromiso del mismo proveedor,
+          o mezcle proveedores para ver el aviso de cuántos cheques saldrían.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3 class="sec">Lo que el lote debe impedir</h3><p>reglas que se validan antes de registrar</p></div>
+      <div class="table-scroll">
+        <table class="compare">
+          <thead><tr><th>Situación</th><th>Qué hace la pantalla</th></tr></thead>
+          <tbody>
+            <tr><td>Documento ya pagado</td><td>No se puede marcar: la casilla queda inhabilitada.</td></tr>
+            <tr><td>Un pago aplica más que el saldo</td><td>El monto se marca en rojo y el botón de registrar se apaga hasta corregirlo.</td></tr>
+            <tr><td>Alguien pagó el documento mientras el lote estaba abierto</td><td>Se detecta al registrar —el saldo se revalida con la fila bloqueada, como ya lo hace el pago individual— y el lote entero se detiene con el aviso.</td></tr>
+            <tr><td>Método bancario sin banco ni cuenta</td><td>No deja registrar; el banco es uno solo para todo el lote.</td></tr>
+            <tr><td>Compromiso que exige permiso de contabilidad</td><td>Si el usuario no lo tiene, esos documentos no se pueden seleccionar (decisión D5).</td></tr>
+            <tr><td>Selección de varios proveedores</td><td>Se permite y se avisa cuántos desembolsos saldrán; si prefiere restringirlo a un proveedor por lote, es la decisión D7.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3 class="sec">Lo que agrega a las decisiones</h3><p>además de las seis de la pestaña «Cómo se arma»</p></div>
+      <div class="card-body">
+        <ol class="decisiones" start="7" style="counter-reset:d 6">
+          <li><span><b>Proveedores mezclados en un lote.</b> ¿Se permite —un desembolso por proveedor, como propongo— o el lote se restringe a un solo proveedor para que sea siempre un cheque?</span></li>
+          <li><span><b>Compromiso saldado por lote.</b> ¿Se marca como procesado (recomendado, para que no siga apareciendo como vivo) o se deja solo con saldo cero?</span></li>
+          <li><span><b>Impresión.</b> Al terminar el lote, ¿imprimo un comprobante por documento (recomendado, es el que ya existe), un solo comprobante por proveedor con el detalle, o los dos?</span></li>
+          <li><span><b>Orden de aplicación del monto disponible.</b> Propongo del más vencido al más nuevo. ¿O prefiere que priorice los compromisos, o el documento más antiguo por fecha?</span></li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= DIFERENCIAS ================= -->
+  <section class="panel stack" id="p-dif" role="tabpanel" aria-labelledby="t-dif" hidden>
+    <div class="card">
+      <div class="card-head">
+        <h3 class="sec">Factura de compra y compromiso, lado a lado</h3>
+        <p>lo que comparten se unifica; lo que no, se resuelve fila por fila</p>
+      </div>
+      <div class="table-scroll">
+        <table class="compare">
+          <thead>
+            <tr><th></th><th class="fac-h">Factura de compra</th><th class="com-h">Compromiso</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>De dónde nace</td>
+              <td>De la recepción de compra; la CxP es 1:1 con la factura del proveedor.<span class="verdict">Se guarda en <code>alm_compra_cxp</code></span></td>
+              <td>Se captura a mano, con renglones presupuestarios y su partida contable.<span class="verdict">Se guarda en <code>prv_compromiso_hdr</code></span></td>
+            </tr>
+            <tr>
+              <td>Numeración</td>
+              <td>Número de factura SAR del proveedor.</td>
+              <td>Correlativo interno del compromiso.<span class="verdict"><b>Unificado:</b> cada uno muestra el suyo, con prefijo distinto; la clave del grid es tipo + id.</span></td>
+            </tr>
+            <tr>
+              <td>Vencimiento</td>
+              <td>Fecha real, calculada con el término de pago del proveedor. Alimenta el semáforo y la antigüedad de saldos.</td>
+              <td><b>No tiene.</b> Hoy se usa la fecha del compromiso como si fuera el vencimiento, así que nace vencido el mismo día.<span class="verdict"><b>Propuesta:</b> mostrarlo como «sin plazo» en vez de inventar un atraso — ver decisión D1.</span></td>
+            </tr>
+            <tr>
+              <td>Estado</td>
+              <td>Pendiente · Parcial · Pagada · Anulada.</td>
+              <td>Pendiente · Procesada · Anulado, y aparte sus abonos parciales.<span class="verdict"><b>Unificado:</b> se muestra la escala de saldo (Pendiente / Parcial / Pagada) y «Procesada» pasa a ser una marca aparte del compromiso.</span></td>
+            </tr>
+            <tr>
+              <td>Cómo se paga</td>
+              <td>Un solo camino: registrar pago (total o parcial), con retenciones, banco o efectivo.</td>
+              <td>Dos caminos distintos: «emitir pago» (paga todo el saldo y arma la partida) y «abonar» (parcial).<span class="verdict"><b>Unificado en el botón, no en el formulario:</b> «Pagar» abre el panel que corresponde a cada tipo.</span></td>
+            </tr>
+            <tr>
+              <td>Abonos ya aplicados</td>
+              <td>Se ven en la ficha de la factura; se anula el último primero.</td>
+              <td>Se ven en la pantalla de abonos del compromiso; misma regla.<span class="verdict"><b>Unificado:</b> un solo panel «Historial de pagos» para los dos.</span></td>
+            </tr>
+            <tr>
+              <td>Saldo del listado</td>
+              <td>Lo trae ya calculado (total, abonado, saldo).</td>
+              <td><b>Hoy el listado solo trae el monto</b>, no el saldo: un compromiso abonado a medias se ve por su valor completo.<span class="verdict"><b>Se corrige al unificar:</b> el saldo pasa a calcularse en la misma consulta que el de las facturas.</span></td>
+            </tr>
+            <tr>
+              <td>Deuda ya saldada</td>
+              <td>La factura anulada sale del listado.</td>
+              <td>Los ~228 compromisos migrados de SIMAFI están marcados como procesados y sin abonos: ya no se deben.<span class="verdict"><b>Regla ya escrita</b> en el estado de cuenta del proveedor; la vista unificada la hereda en vez de repetirla.</span></td>
+            </tr>
+            <tr>
+              <td>Quién entra</td>
+              <td>Pantalla abierta a quien tenga acceso al portal.</td>
+              <td>Exige permiso de Contabilidad.<span class="verdict"><b>A decidir (D5):</b> ver la lista completa con permiso de compras y dejar las acciones del compromiso detrás del permiso de contabilidad.</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3 class="sec">Lo que no cambia</h3><p>para que el alcance quede claro</p></div>
+      <div class="card-body">
+        <ul class="notes">
+          <li>El <b>formulario del compromiso</b> (cabecera, renglones presupuestarios, partida) sigue igual; se abre desde la fila.</li>
+          <li>La <b>recepción de compras</b> sigue siendo la única forma de crear una factura por pagar: en esta vista no se crean facturas.</li>
+          <li>La <b>contabilidad</b> de cada camino no se toca: cada pago sigue generando exactamente la misma partida que hoy.</li>
+          <li>El <b>estado de cuenta del proveedor</b> y la <b>antigüedad de saldos</b> ya unifican los dos orígenes; esta pantalla usa su mismo cálculo, así que las tres cuadran entre sí.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ARQUITECTURA ================= -->
+  <section class="panel stack" id="p-arq" role="tabpanel" aria-labelledby="t-arq" hidden>
+    <div class="card">
+      <div class="card-head">
+        <h3 class="sec">De dónde saldrían los datos</h3>
+        <p>sin duplicar reglas: la unión ya existe y está probada</p>
+      </div>
+      <div class="card-body stack" style="gap:16px">
+        <div class="flow">
+          <div class="node n-fac">
+            <h4>Facturas de compra</h4>
+            <p><code>alm_compra_cxp</code> + sus abonos. Fuera las anuladas.</p>
+          </div>
+          <div class="node n-com">
+            <h4>Compromisos</h4>
+            <p><code>prv_compromiso_hdr</code> + sus abonos. Fuera los anulados y los procesados sin abonos.</p>
+          </div>
+          <div class="node n-one">
+            <h4>Una sola función SQL</h4>
+            <p>La misma que ya alimenta el estado de cuenta, ampliada para correr sobre todos los proveedores y con filtros de la pantalla.</p>
+          </div>
+          <div class="node n-one">
+            <h4>Un solo grid</h4>
+            <p>Una fila = un documento por pagar, con su tipo, saldo y estado ya resueltos por la consulta.</p>
+          </div>
+        </div>
+        <ul class="notes">
+          <li>La función que une las dos ramas <b>ya está escrita y en uso</b> (estado de cuenta y antigüedad de saldos). El trabajo es abrirla a «todos los proveedores» y darle los filtros de esta pantalla, no inventar la unión de nuevo.</li>
+          <li>Así, <b>las reglas de vigencia viven en un solo lugar</b>: si mañana cambia qué se considera deuda viva, cambia en una función y las tres pantallas se enteran.</li>
+          <li>El acceso a datos va por función de Postgres, como manda el proyecto; el listado de compromisos por consulta directa queda solo para su propia pantalla de mantenimiento.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3 class="sec">Cómo lo entregaría</h3><p>en pasos que se pueden parar en cualquier punto</p></div>
+      <div class="card-body">
+        <div class="fases">
+          <div class="fase">
+            <span class="f-lbl">Paso 1</span>
+            <div><h4>La consulta unificada</h4><p>Ampliar la función SQL a todos los proveedores, con filtros de búsqueda, tipo, estado y vencidos. Script en <code>Database/</code> y pruebas de que el saldo cuadra con el estado de cuenta.</p></div>
+          </div>
+          <div class="fase">
+            <span class="f-lbl">Paso 2</span>
+            <div><h4>El servicio y su endpoint</h4><p>Un documento por pagar como unidad, con su tipo, saldo y estado, y las acciones que cada tipo permite.</p></div>
+          </div>
+          <div class="fase">
+            <span class="f-lbl">Paso 3</span>
+            <div><h4>La pantalla</h4><p>El grid de esta propuesta: franja de tipo, filtro segmentado, agrupación, totales y menú de acciones por fila. Reusa los paneles de pago y de historial que ya existen.</p></div>
+          </div>
+          <div class="fase">
+            <span class="f-lbl">Paso 4</span>
+            <div><h4>Menú y accesos</h4><p>La vista unificada toma el lugar de «Pagos a proveedores»; los enlaces a compromisos desde la ficha del proveedor llegan aquí con el filtro puesto.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3 class="sec">Lo que necesito que decida</h3><p>cada decisión cambia una parte concreta del grid</p></div>
+      <div class="card-body">
+        <ol class="decisiones">
+          <li><span><b>Vencimiento del compromiso.</b> Hoy no tiene, y por eso nace «vencido». ¿Lo mostramos como <em>sin plazo</em> (mi recomendación, no toca la base) o le agregamos una fecha de vencimiento de verdad al compromiso, como ya la tiene la orden de compra?</span></li>
+          <li><span><b>Documentos ya pagados.</b> ¿La vista arranca solo con lo pendiente (recomendado) y lo pagado se ve activando un filtro, o entra todo desde el inicio?</span></li>
+          <li><span><b>Las dos pantallas actuales.</b> Propongo que la unificada reemplace «Pagos a proveedores» en el menú, y que «Compromisos» quede accesible como el mantenimiento donde se crean y editan. ¿O prefiere que la unificada las sustituya a las dos?</span></li>
+          <li><span><b>Pago del compromiso.</b> Hoy son dos caminos («emitir pago» total y «abonar» parcial). ¿Los dejamos como están detrás de un mismo botón (recomendado, no toca contabilidad) o los fundimos en un único formulario de pago como el de facturas?</span></li>
+          <li><span><b>Permisos.</b> ¿Ver la lista completa con permiso de compras y dejar crear, editar o eliminar compromisos detrás del permiso de contabilidad?</span></li>
+          <li><span><b>Otros documentos.</b> ¿Entra algo más a esta vista más adelante —notas de débito o crédito de proveedor, anticipos— o se queda en estos dos tipos?</span></li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <p class="footnote">Prototipo de pantalla · 22/08/2026 · datos de ejemplo, sin conexión a la base</p>
+</main>
+
+<!-- ================= PANEL DE PAGO ================= -->
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" hidden role="dialog" aria-modal="true" aria-labelledby="dr-title">
+  <header>
+    <div>
+      <h4 id="dr-title">Registrar pago</h4>
+      <span class="sub" id="dr-sub"></span>
+    </div>
+    <button class="x" type="button" id="dr-close" aria-label="Cerrar">×</button>
+  </header>
+  <div class="body" id="dr-body"></div>
+  <footer id="dr-foot">
+    <button class="btn" type="button" id="dr-cancel">Cancelar</button>
+    <button class="btn primary" type="button" id="dr-ok">Registrar pago</button>
+  </footer>
+</aside>
+
+<script>
+  // ---------- datos de ejemplo ----------
+  // tipo: FAC = factura de compra · COM = compromiso
+  const DATA = [
+    { tipo:'FAC', doc:'000-001-01-00012345', prov:'Químicos del Valle, S. de R.L.', cod:'0142', concepto:'Cloro granulado 65% · 40 sacos', fecha:'02/07/2026', vence:'01/08/2026', dias:21, total:186400.00, abonado:60000.00 },
+    { tipo:'COM', doc:'OPD-00412', prov:'Alcaldía Municipal de San Pedro Sula', cod:'0001', concepto:'Tasa de servicios municipales · julio', fecha:'05/07/2026', vence:null, dias:null, total:45000.00, abonado:0 },
+    { tipo:'FAC', doc:'000-001-01-00012402', prov:'Ferretería Industrial Sula', cod:'0088', concepto:'Tubería PVC 1/2" y accesorios', fecha:'14/07/2026', vence:'13/08/2026', dias:9, total:74320.50, abonado:0 },
+    { tipo:'COM', doc:'OPD-00418', prov:'Seguros del País, S.A.', cod:'0233', concepto:'Póliza de flota vehicular · cuota 3/4', fecha:'18/07/2026', vence:null, dias:null, total:128750.00, abonado:64375.00 },
+    { tipo:'FAC', doc:'000-001-01-00012511', prov:'Distribuidora Eléctrica Cortés', cod:'0177', concepto:'Bombas sumergibles 5 HP (2)', fecha:'24/07/2026', vence:'23/08/2026', dias:-1, total:342900.00, abonado:0 },
+    { tipo:'COM', doc:'OPD-00421', prov:'Transportes Merendón', cod:'0305', concepto:'Fletes de acarreo · quincena 2 de julio', fecha:'31/07/2026', vence:null, dias:null, total:38900.00, abonado:38900.00 },
+    { tipo:'FAC', doc:'000-001-01-00012577', prov:'Químicos del Valle, S. de R.L.', cod:'0142', concepto:'Sulfato de aluminio · 12 toneles', fecha:'01/08/2026', vence:'31/08/2026', dias:-9, total:98600.00, abonado:0 },
+    { tipo:'FAC', doc:'FAC-000318', prov:'Suministros de Oficina Honduras', cod:'0410', concepto:'Papelería y consumibles de impresión', fecha:'04/08/2026', vence:'19/08/2026', dias:3, total:12480.75, abonado:0 },
+    { tipo:'COM', doc:'OPD-00427', prov:'Bufete Lagos & Asociados', cod:'0512', concepto:'Honorarios legales · retención 12.5%', fecha:'06/08/2026', vence:null, dias:null, total:65000.00, abonado:0 },
+    { tipo:'FAC', doc:'000-001-01-00012640', prov:'Ferretería Industrial Sula', cod:'0088', concepto:'Válvulas de compuerta 4" (6)', fecha:'08/08/2026', vence:'07/09/2026', dias:-16, total:56780.00, abonado:56780.00 },
+    { tipo:'COM', doc:'OPD-00430', prov:'Empresa Nacional de Energía', cod:'0002', concepto:'Energía eléctrica · pozos y rebombeos', fecha:'11/08/2026', vence:null, dias:null, total:412300.00, abonado:150000.00 },
+    { tipo:'FAC', doc:'000-001-01-00012688', prov:'Laboratorio Aqua Control', cod:'0361', concepto:'Análisis bacteriológicos · agosto', fecha:'12/08/2026', vence:'11/09/2026', dias:-20, total:24600.00, abonado:0 },
+    { tipo:'COM', doc:'OPD-00433', prov:'Alcaldía Municipal de San Pedro Sula', cod:'0001', concepto:'Permiso de operación anual', fecha:'15/08/2026', vence:null, dias:null, total:18500.00, abonado:0 },
+    { tipo:'FAC', doc:'000-001-01-00012705', prov:'Distribuidora Eléctrica Cortés', cod:'0177', concepto:'Tablero de control y arrancadores', fecha:'18/08/2026', vence:'17/09/2026', dias:-26, total:157200.00, abonado:40000.00 }
+  ];
+
+  const L = n => 'L ' + n.toLocaleString('es-HN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const N = n => n.toLocaleString('es-HN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  DATA.forEach((d, i) => {
+    d.id = i;
+    d.saldo = +(d.total - d.abonado).toFixed(2);
+    d.estado = d.saldo <= 0 ? 3 : d.abonado > 0 ? 2 : 1;      // 1 pendiente · 2 parcial · 3 pagada
+    d.vencido = d.dias !== null && d.dias > 0 && d.saldo > 0;
+  });
+
+  const ESTADOS = { 1: ['Pendiente', 'neutral'], 2: ['Parcial', 'warn'], 3: ['Pagada', 'ok'] };
+
+  const state = { tipo: 'TODOS', q: '', estado: '', soloVencidos: false, agrupar: false, sel: new Set() };
+
+  function filtrar() {
+    const q = state.q.trim().toLowerCase();
+    return DATA.filter(d =>
+      (state.tipo === 'TODOS' || d.tipo === state.tipo) &&
+      (state.estado === '' || String(d.estado) === state.estado) &&
+      (!state.soloVencidos || d.vencido) &&
+      (q === '' || (d.prov + ' ' + d.doc + ' ' + d.concepto + ' ' + d.cod).toLowerCase().includes(q))
+    );
+  }
+
+  function celdaVence(d) {
+    if (d.vence === null) {
+      return '<span class="z">—</span><span class="venc z">sin plazo</span>';
+    }
+    if (d.estado === 3) return d.vence + '<span class="venc z">pagada</span>';
+    const cls = d.dias > 0 ? 'bad' : d.dias === 0 ? 'warn' : d.dias >= -7 ? 'warn' : 'ok';
+    const txt = d.dias > 0 ? `vencida ${d.dias} d` : d.dias === 0 ? 'vence hoy' : `en ${-d.dias} d`;
+    return d.vence + `<span class="venc ${cls}">${txt}</span>`;
+  }
+
+  function fila(d) {
+    const [txtEstado, clsEstado] = ESTADOS[d.estado];
+    const esFac = d.tipo === 'FAC';
+    const marcado = state.sel.has(d.id);
+    return `
+      <tr data-tipo="${d.tipo}" class="${d.estado === 3 ? 'paid' : ''} ${marcado ? 'picked' : ''}">
+        <td class="sel">
+          <input type="checkbox" class="chk" data-pick="${d.id}" ${marcado ? 'checked' : ''} ${d.saldo <= 0 ? 'disabled' : ''}
+                 aria-label="Seleccionar ${d.doc}">
+        </td>
+        <td class="tipo">
+          <div class="tipo-cell">
+            <span class="stripe" aria-hidden="true"></span>
+            <span class="chip ${esFac ? 'fac' : 'com'}">${esFac ? 'Factura' : 'Compromiso'}</span>
+          </div>
+        </td>
+        <td><span class="docnum">${d.doc}</span></td>
+        <td><span class="name">${d.prov}</span><span class="sub">${d.cod} · ${d.concepto}</span></td>
+        <td>${d.fecha}</td>
+        <td>${celdaVence(d)}</td>
+        <td class="num">${N(d.total)}</td>
+        <td class="num ${d.abonado === 0 ? 'z' : ''}">${d.abonado === 0 ? '—' : N(d.abonado)}</td>
+        <td class="num" style="font-weight:700">${d.saldo === 0 ? '<span class="z">—</span>' : N(d.saldo)}</td>
+        <td><span class="chip ${clsEstado}"><span class="dot"></span>${txtEstado}</span></td>
+        <td>
+          <div class="acts">
+            <button class="btn sm primary" type="button" data-pagar="${d.id}" ${d.saldo <= 0 ? 'disabled' : ''}>Pagar</button>
+            <div class="menu-wrap">
+              <button class="ico" type="button" data-menu="${d.id}" aria-haspopup="true" aria-expanded="false" aria-label="Más acciones">⋯</button>
+              <div class="menu" id="menu-${d.id}" hidden>
+                <b>Comunes</b>
+                <button type="button">Historial de pagos</button>
+                <button type="button">Imprimir comprobante</button>
+                <button type="button">Ver partida contable</button>
+                <div class="sep"></div>
+                <b>Solo ${esFac ? 'facturas' : 'compromisos'}</b>
+                ${esFac ? `
+                  <button type="button">Ver recepción de compra <span class="tag fac">FAC</span></button>
+                  <button type="button">Ver orden de compra <span class="tag fac">FAC</span></button>
+                ` : `
+                  <button type="button">Editar compromiso <span class="tag com">COM</span></button>
+                  <button type="button">Emitir pago (procesar) <span class="tag com">COM</span></button>
+                  <button type="button">Eliminar compromiso <span class="tag com">COM</span></button>
+                `}
+              </div>
+            </div>
+          </div>
+        </td>
+      </tr>`;
+  }
+
+  function filaGrupo(tipo, filas) {
+    const total = filas.reduce((s, d) => s + d.saldo, 0);
+    return `<tr class="group"><td colspan="11">
+        <span class="chip ${tipo === 'FAC' ? 'fac' : 'com'}">${tipo === 'FAC' ? 'Facturas de compra' : 'Compromisos'}</span>
+        <span style="color:var(--ink-3);font-weight:500;margin-left:8px">${filas.length} documento(s)</span>
+        <span class="g-total">${L(total)}</span>
+      </td></tr>`;
+  }
+
+  function render() {
+    const rows = filtrar();
+    const tbody = document.getElementById('tbody');
+
+    if (rows.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="11"><div class="empty">No hay documentos por pagar con estos filtros.</div></td></tr>`;
+    } else if (state.agrupar) {
+      const fac = rows.filter(d => d.tipo === 'FAC');
+      const com = rows.filter(d => d.tipo === 'COM');
+      tbody.innerHTML =
+        (fac.length ? filaGrupo('FAC', fac) + fac.map(fila).join('') : '') +
+        (com.length ? filaGrupo('COM', com) + com.map(fila).join('') : '');
+    } else {
+      tbody.innerHTML = rows.map(fila).join('');
+    }
+
+    const sum = (arr, k) => arr.reduce((s, d) => s + d[k], 0);
+    document.getElementById('f-total').textContent = N(sum(rows, 'total'));
+    document.getElementById('f-abonado').textContent = N(sum(rows, 'abonado'));
+    document.getElementById('f-saldo').textContent = N(sum(rows, 'saldo'));
+    document.getElementById('t-saldo').textContent = L(sum(rows, 'saldo'));
+
+    // KPI: siempre sobre el total pendiente, no sobre el filtro
+    const vivos = DATA.filter(d => d.saldo > 0);
+    const facs = vivos.filter(d => d.tipo === 'FAC');
+    const coms = vivos.filter(d => d.tipo === 'COM');
+    const venc = vivos.filter(d => d.vencido);
+    const kpi = (id, monto, sub) => {
+      const [ent, dec] = N(monto).split('.');
+      document.getElementById(id).innerHTML = 'L ' + ent + '<small>.' + dec + '</small>';
+      document.getElementById(id + '-sub').textContent = sub;
+    };
+    kpi('k-total', sum(vivos, 'saldo'), `${vivos.length} documentos con saldo · ${DATA.length} en total`);
+    kpi('k-fac', sum(facs, 'saldo'), `${facs.length} factura(s) de compra`);
+    kpi('k-com', sum(coms, 'saldo'), `${coms.length} compromiso(s)`);
+    kpi('k-venc', sum(venc, 'saldo'), venc.length ? `${venc.length} documento(s) fuera de plazo` : 'nada fuera de plazo');
+
+    document.getElementById('tally-todos').textContent = DATA.length;
+    document.getElementById('tally-fac').textContent = DATA.filter(d => d.tipo === 'FAC').length;
+    document.getElementById('tally-com').textContent = DATA.filter(d => d.tipo === 'COM').length;
+
+    sincronizarSeleccion();
+  }
+
+  /// Refresca solo lo que depende de la selección. Marcar una casilla NO redibuja el grid:
+  /// re-crear las filas en cada clic haría perder el foco y descartaría clics seguidos.
+  function sincronizarSeleccion() {
+    const pagables = filtrar().filter(d => d.saldo > 0);
+    const chkAll = document.getElementById('chk-all');
+    chkAll.checked = pagables.length > 0 && pagables.every(d => state.sel.has(d.id));
+    chkAll.indeterminate = !chkAll.checked && pagables.some(d => state.sel.has(d.id));
+    chkAll.disabled = pagables.length === 0;
+
+    pintarBarraSeleccion();
+  }
+
+  // ---------- selección múltiple ----------
+  const seleccionados = () => DATA.filter(d => state.sel.has(d.id));
+
+  function pintarBarraSeleccion() {
+    const sel = seleccionados();
+    const barra = document.getElementById('selbar');
+    barra.hidden = sel.length === 0;
+    if (sel.length === 0) return;
+
+    const provs = [...new Set(sel.map(d => d.cod))];
+    const facs = sel.filter(d => d.tipo === 'FAC').length;
+    const coms = sel.length - facs;
+    const saldo = sel.reduce((s, d) => s + d.saldo, 0);
+
+    document.getElementById('sel-count').innerHTML =
+      `${sel.length} documento(s)<small>${facs} factura(s) · ${coms} compromiso(s)</small>`;
+    document.getElementById('sel-amount').innerHTML =
+      `${L(saldo)}<small>Saldo seleccionado</small>`;
+
+    const mix = document.getElementById('sel-mix');
+    mix.classList.toggle('multi', provs.length > 1);
+    mix.innerHTML = provs.length === 1
+      ? `<span class="dot" style="color:var(--ok)"></span>Un solo proveedor · sale <b style="margin-left:4px">1 desembolso</b>`
+      : `<span class="dot"></span>${provs.length} proveedores · saldrían <b style="margin-left:4px">${provs.length} desembolsos</b>`;
+  }
+
+  document.getElementById('tbody').addEventListener('change', e => {
+    const chk = e.target.closest('[data-pick]');
+    if (!chk) return;
+    const id = +chk.dataset.pick;
+    if (chk.checked) state.sel.add(id); else state.sel.delete(id);
+    chk.closest('tr').classList.toggle('picked', chk.checked);
+    sincronizarSeleccion();
+  });
+
+  document.getElementById('chk-all').addEventListener('change', e => {
+    filtrar().filter(d => d.saldo > 0).forEach(d => {
+      if (e.target.checked) state.sel.add(d.id); else state.sel.delete(d.id);
+    });
+    render();
+  });
+
+  document.getElementById('sel-clear').addEventListener('click', () => { state.sel.clear(); render(); });
+  document.getElementById('sel-pay').addEventListener('click', () => abrirLote());
+
+  // ---------- filtros ----------
+  document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => {
+    state.tipo = b.dataset.tipo;
+    document.querySelectorAll('.seg button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    render();
+  }));
+  document.getElementById('q').addEventListener('input', e => { state.q = e.target.value; render(); });
+  document.getElementById('f-estado').addEventListener('change', e => { state.estado = e.target.value; render(); });
+  document.getElementById('f-venc').addEventListener('change', e => { state.soloVencidos = e.target.checked; render(); });
+  document.getElementById('f-group').addEventListener('change', e => { state.agrupar = e.target.checked; render(); });
+
+  // ---------- menú de acciones ----------
+  function cerrarMenus(excepto) {
+    document.querySelectorAll('.menu').forEach(m => { if (m !== excepto) m.hidden = true; });
+    document.querySelectorAll('[data-menu]').forEach(b => {
+      b.setAttribute('aria-expanded', String(document.getElementById('menu-' + b.dataset.menu) === excepto));
+    });
+  }
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('[data-menu]');
+    if (btn) {
+      const m = document.getElementById('menu-' + btn.dataset.menu);
+      const abrir = m.hidden;
+      cerrarMenus(abrir ? m : null);
+      m.hidden = !abrir;
+      return;
+    }
+    if (!e.target.closest('.menu')) cerrarMenus(null);
+  });
+
+  // ---------- panel de pago ----------
+  const drawer = document.getElementById('drawer'), scrim = document.getElementById('scrim');
+
+  // Bancos con sus cuentas: el combo de cuenta solo lista las del banco elegido.
+  const BANCOS = [
+    { id: 1, nombre: 'Banco Atlántida', cuentas: [
+      { id: 11, num: '010-234-567', nombre: 'Cuenta corriente operativa', moneda: 'HNL' },
+      { id: 12, num: '010-998-114', nombre: 'Pagos a proveedores', moneda: 'HNL' }
+    ]},
+    { id: 2, nombre: 'Banco Ficohsa', cuentas: [
+      { id: 21, num: '200-118-994', nombre: 'Cuenta corriente', moneda: 'HNL' },
+      { id: 22, num: '200-450-771', nombre: 'Cuenta en dólares', moneda: 'USD' }
+    ]},
+    { id: 3, nombre: 'BAC Credomatic', cuentas: [
+      { id: 31, num: '744-201-336', nombre: 'Cuenta corriente', moneda: 'HNL' }
+    ]}
+  ];
+  const CUENTAS_CAJA = ['1101-01 · Caja general', '1101-02 · Caja chica', '1102-01 · Fondo rotatorio'];
+
+  // Cheque, transferencia y depósito salen de un banco; efectivo y contable, de una cuenta del plan.
+  const esBancario = m => ['Cheque', 'Transferencia', 'Depósito'].includes(m);
+  const bancoDe = id => BANCOS.find(b => b.id === id) ?? null;
+
+  const formaPago = { metodo: 'Transferencia', bancoId: null, cuentaId: null, metodos: [] };
+  const formaPagoCompleta = () =>
+    !esBancario(formaPago.metodo) || (formaPago.bancoId !== null && formaPago.cuentaId !== null);
+
+  /// Método + (banco → cuenta) en cascada, o método + cuenta contable si no es bancario.
+  /// Vive en su propio contenedor para poder repintarlo sin rehacer el resto del panel.
+  function bloqueFormaPago() {
+    const banco = bancoDe(formaPago.bancoId);
+    const cuentas = banco?.cuentas ?? [];
+    const bancario = esBancario(formaPago.metodo);
+
+    const comboMetodo = `
+      <div class="fld"><label for="f-metodo">Método</label>
+        <select class="control" id="f-metodo">
+          ${formaPago.metodos.map(m => `<option ${formaPago.metodo === m ? 'selected' : ''}>${m}</option>`).join('')}
+        </select></div>`;
+
+    if (!bancario) {
+      return `
+        <div class="row2">
+          ${comboMetodo}
+          <div class="fld"><label for="f-caja">Cuenta contable ${formaPago.metodo === 'Efectivo' ? 'de la caja' : 'de contrapartida'}</label>
+            <select class="control" id="f-caja">${CUENTAS_CAJA.map(c => `<option>${c}</option>`).join('')}</select></div>
+        </div>`;
+    }
+
+    return `
+      <div class="row2">
+        ${comboMetodo}
+        <div class="fld"><label for="f-banco">Banco <span style="color:var(--bad)">*</span></label>
+          <select class="control" id="f-banco">
+            <option value="">Seleccione el banco…</option>
+            ${BANCOS.map(b => `<option value="${b.id}" ${formaPago.bancoId === b.id ? 'selected' : ''}>${b.nombre}</option>`).join('')}
+          </select></div>
+      </div>
+      <div class="fld"><label for="f-cuenta">Cuenta del banco <span style="color:var(--bad)">*</span></label>
+        <select class="control" id="f-cuenta" ${banco ? '' : 'disabled'}>
+          <option value="">${banco ? 'Seleccione la cuenta…' : 'Elija primero el banco'}</option>
+          ${cuentas.map(c => `<option value="${c.id}" ${formaPago.cuentaId === c.id ? 'selected' : ''}>${c.num} · ${c.nombre}${c.moneda === 'USD' ? ' (USD)' : ''}</option>`).join('')}
+        </select>
+        ${banco ? `<div style="font-size:12px;color:var(--ink-3)">${cuentas.length} cuenta(s) de ${banco.nombre}</div>` : ''}
+      </div>`;
+  }
+
+  function repintarFormaPago() {
+    const cont = document.getElementById('fp');
+    if (cont) cont.innerHTML = bloqueFormaPago();
+
+    // el pie del lote nombra la cuenta elegida: se actualiza solo ese texto, para no
+    // rehacer la tabla (y no perder el foco) al elegir banco o cuenta
+    const destino = document.getElementById('destino-txt');
+    if (destino) destino.textContent = destinoFondos();
+    const falta = document.getElementById('falta-banco');
+    if (falta) falta.hidden = formaPagoCompleta();
+
+    document.getElementById('dr-ok').disabled = !formaPagoCompleta() ||
+      (modoDrawer === 'lote' && !loteRegistrable());
+  }
+
+  function panelFactura(d) {
+    return `
+      <div class="saldo-box"><span>Saldo pendiente</span><b>${N(d.saldo)}</b></div>
+      <div class="note fac">Factura de compra <b>${d.doc}</b>. Se registra un pago total o parcial, con retenciones si aplican; el saldo baja por el monto bruto.</div>
+      <div class="row2">
+        <div class="fld"><label for="p1">Monto a pagar</label><input class="control" id="p1" value="${N(d.saldo)}"></div>
+        <div class="fld"><label for="p2">Fecha</label><input class="control" id="p2" value="22/08/2026"></div>
+      </div>
+      <div id="fp" class="stack" style="gap:15px">${bloqueFormaPago()}</div>
+      <div class="fld"><label for="p5">Retenciones</label><select class="control" id="p5"><option>Sin retención</option><option>ISR 12.5% sobre servicios</option><option>ISV retenido 15%</option></select></div>
+      <div class="fld"><label for="p6">Observaciones</label><input class="control" id="p6" placeholder="Opcional"></div>`;
+  }
+
+  function panelCompromiso(d) {
+    return `
+      <div class="saldo-box"><span>Saldo pendiente</span><b>${N(d.saldo)}</b></div>
+      <div class="note com">Compromiso <b>${d.doc}</b>. Se puede <b>abonar</b> una parte o <b>emitir el pago</b> del saldo completo, que además arma la partida contable y el cheque.</div>
+      <div class="fld"><label for="c0">Qué se hace</label><select class="control" id="c0"><option>Abonar una parte</option><option>Emitir pago del saldo completo</option></select></div>
+      <div class="row2">
+        <div class="fld"><label for="c1">Monto</label><input class="control" id="c1" value="${N(d.saldo)}"></div>
+        <div class="fld"><label for="c2">Fecha</label><input class="control" id="c2" value="22/08/2026"></div>
+      </div>
+      <div id="fp" class="stack" style="gap:15px">${bloqueFormaPago()}</div>
+      <div class="fld"><label for="c5">Retenciones</label><select class="control" id="c5"><option>Sin retención</option><option>ISR 12.5% sobre servicios</option></select></div>
+      <div class="fld"><label for="c6">Observaciones</label><input class="control" id="c6" placeholder="Opcional"></div>`;
+  }
+
+  function abrirPago(d) {
+    drawer.classList.remove('wide');
+    modoDrawer = 'individual';
+    document.getElementById('dr-foot').hidden = false;
+    document.getElementById('dr-ok').textContent = 'Registrar pago';
+
+    // cada tipo ofrece sus propios métodos; el banco y la cuenta arrancan vacíos
+    formaPago.metodos = d.tipo === 'FAC'
+      ? ['Efectivo', 'Transferencia', 'Cheque']
+      : ['Cheque', 'Transferencia', 'Depósito', 'Contable'];
+    formaPago.metodo = d.tipo === 'FAC' ? 'Transferencia' : 'Cheque';
+    formaPago.bancoId = null;
+    formaPago.cuentaId = null;
+
+    document.getElementById('dr-title').textContent = d.tipo === 'FAC' ? 'Pago de factura de compra' : 'Pago de compromiso';
+    document.getElementById('dr-sub').innerHTML =
+      `<span class="chip ${d.tipo === 'FAC' ? 'fac' : 'com'}">${d.tipo === 'FAC' ? 'Factura' : 'Compromiso'}</span> ${d.prov}`;
+    document.getElementById('dr-body').innerHTML = d.tipo === 'FAC' ? panelFactura(d) : panelCompromiso(d);
+    document.getElementById('dr-ok').disabled = !formaPagoCompleta();
+    drawer.hidden = false; scrim.hidden = false;
+    document.getElementById('dr-close').focus();
+  }
+  function cerrarPago() { drawer.hidden = true; scrim.hidden = true; drawer.classList.remove('wide'); modoDrawer = null; }
+
+  // ================= PAGO EN LOTE =================
+  let modoDrawer = null;
+  const lote = { modo: 'FULL', disponible: 0, retencion: 0, montos: new Map() };
+
+  const fechaNum = d => { const [dd, mm, yy] = d.fecha.split('/'); return +(yy + mm + dd); };
+  // más vencido primero; los compromisos sin plazo entran después, del más antiguo al más nuevo
+  const ordenAplicacion = (a, b) => (b.dias ?? -1000) - (a.dias ?? -1000) || fechaNum(a) - fechaNum(b);
+
+  function repartir() {
+    const docs = seleccionados();
+    lote.montos = new Map();
+    if (lote.modo === 'FULL') {
+      docs.forEach(d => lote.montos.set(d.id, d.saldo));
+    } else if (lote.modo === 'DISP') {
+      let resto = lote.disponible;
+      [...docs].sort(ordenAplicacion).forEach(d => {
+        const aplica = Math.min(d.saldo, Math.max(0, resto));
+        lote.montos.set(d.id, +aplica.toFixed(2));
+        resto = +(resto - aplica).toFixed(2);
+      });
+    }
+    // en modo MANUAL los montos ya vienen escritos a mano; se conservan
+  }
+
+  const montoDe = d => lote.montos.get(d.id) ?? 0;
+  const retencionDe = d => +(montoDe(d) * lote.retencion / 100).toFixed(2);
+
+  function grupos() {
+    const map = new Map();
+    seleccionados().forEach(d => {
+      if (!map.has(d.cod)) map.set(d.cod, { cod: d.cod, prov: d.prov, docs: [] });
+      map.get(d.cod).docs.push(d);
+    });
+    return [...map.values()];
+  }
+
+  function cuerpoLote() {
+    const gs = grupos();
+    const docs = seleccionados();
+    const bruto = docs.reduce((s, d) => s + montoDe(d), 0);
+    const ret = docs.reduce((s, d) => s + retencionDe(d), 0);
+    const excedido = docs.some(d => montoDe(d) > d.saldo + 0.004);
+    const parciales = docs.filter(d => montoDe(d) > 0 && montoDe(d) < d.saldo - 0.004).length;
+    const sinAplicar = docs.filter(d => montoDe(d) <= 0).length;
+    const esCheque = formaPago.metodo === 'Cheque';
+
+    // solo cuentan como desembolso los proveedores que realmente reciben dinero
+    const gsPago = gs.filter(g => g.docs.some(d => montoDe(d) > 0));
+
+    const bloques = gs.map(g => {
+      const gBruto = g.docs.reduce((s, d) => s + montoDe(d), 0);
+      const gRet = g.docs.reduce((s, d) => s + retencionDe(d), 0);
+      const nCheque = gsPago.indexOf(g);
+      return `
+      <div class="lote-prov">
+        <div class="ph">
+          <span class="pn">${g.prov}</span>
+          <span class="pd">${g.cod} · ${g.docs.length} documento(s)${esCheque && nCheque >= 0 ? ` · cheque No. ${1045 + nCheque}` : ''}</span>
+          <span class="pay">${gBruto > 0 ? N(gBruto - gRet) : '<span class="z">sin pago</span>'}</span>
+        </div>
+        <table class="lote">
+          <thead>
+            <tr><th style="width:96px">Tipo</th><th>Documento</th><th class="r" style="width:104px">Saldo</th>
+                <th class="r" style="width:126px">Se aplica</th><th class="r" style="width:96px">Retención</th><th class="r" style="width:104px">Neto</th></tr>
+          </thead>
+          <tbody>
+            ${g.docs.map(d => {
+              const m = montoDe(d), r = retencionDe(d);
+              return `<tr>
+                <td><span class="chip ${d.tipo === 'FAC' ? 'fac' : 'com'}">${d.tipo === 'FAC' ? 'Factura' : 'Compromiso'}</span></td>
+                <td><span class="docnum">${d.doc}</span><span class="sub">${d.concepto}</span></td>
+                <td class="r num">${N(d.saldo)}</td>
+                <td class="r"><input class="mini ${m > d.saldo + 0.004 ? 'over' : ''}" data-monto="${d.id}" value="${N(m)}" aria-label="Monto a aplicar a ${d.doc}"></td>
+                <td class="r num ${r === 0 ? 'z' : ''}">${r === 0 ? '—' : N(r)}</td>
+                <td class="r num">${N(m - r)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+    }).join('');
+
+    return `
+      <div class="modes" role="radiogroup" aria-label="Cómo se reparte el dinero">
+        <label class="mode ${lote.modo === 'FULL' ? 'on' : ''}">
+          <input type="radio" name="modo" value="FULL" ${lote.modo === 'FULL' ? 'checked' : ''}>
+          <b>Saldo completo</b><span>paga todo lo seleccionado</span>
+        </label>
+        <label class="mode ${lote.modo === 'DISP' ? 'on' : ''}">
+          <input type="radio" name="modo" value="DISP" ${lote.modo === 'DISP' ? 'checked' : ''}>
+          <b>Monto disponible</b><span>del más vencido al más nuevo</span>
+        </label>
+        <label class="mode ${lote.modo === 'MANUAL' ? 'on' : ''}">
+          <input type="radio" name="modo" value="MANUAL" ${lote.modo === 'MANUAL' ? 'checked' : ''}>
+          <b>A mano</b><span>usted escribe cada monto</span>
+        </label>
+      </div>
+
+      ${lote.modo === 'DISP' ? `
+        <div class="fld"><label for="disp">Cuánto hay disponible</label>
+          <input class="control" id="disp" value="${N(lote.disponible)}" style="max-width:190px"></div>` : ''}
+
+      <div id="fp" class="stack" style="gap:15px">${bloqueFormaPago()}</div>
+      <div class="row2">
+        <div class="fld"><label for="l-fecha">Fecha</label><input class="control" id="l-fecha" value="22/08/2026"></div>
+        <div class="fld"><label for="l-ret">Retención sobre lo aplicado</label>
+          <select class="control" id="l-ret">
+            <option value="0" ${lote.retencion === 0 ? 'selected' : ''}>Sin retención</option>
+            <option value="12.5" ${lote.retencion === 12.5 ? 'selected' : ''}>ISR 12.5% sobre servicios</option>
+            <option value="15" ${lote.retencion === 15 ? 'selected' : ''}>ISV retenido 15%</option>
+          </select></div>
+      </div>
+      <div class="note">El banco y la cuenta son <b>uno solo para todo el lote</b>: de ahí sale cada desembolso.</div>
+
+      ${bloques}
+
+      <div>
+        <div class="totrow"><span>Se aplica a la deuda (bruto)</span><b>${N(bruto)}</b></div>
+        <div class="totrow"><span>Retenido</span><b>${ret === 0 ? '—' : '−' + N(ret)}</b></div>
+        <div class="totrow grand"><span>Sale <span id="destino-txt">${destinoFondos()}</span> — ${gsPago.length} desembolso(s)</span><b>${L(bruto - ret)}</b></div>
+      </div>
+
+      <div class="note com" id="falta-banco" ${formaPagoCompleta() ? 'hidden' : ''}>Falta elegir el <b>banco</b> y la <b>cuenta</b> de donde sale el pago.</div>
+
+      ${excedido ? `<div class="note com">Hay montos mayores que el saldo del documento. Corríjalos para poder registrar.</div>` : ''}
+      ${!excedido && (parciales > 0 || sinAplicar > 0) ? `
+        <div class="note">
+          ${parciales > 0 ? `<b>${parciales}</b> documento(s) quedarán con saldo pendiente (pago parcial).` : ''}
+          ${sinAplicar > 0 ? ` <b>${sinAplicar}</b> quedarán sin pago porque no alcanzó el monto disponible; se pueden quitar de la selección.` : ''}
+        </div>` : ''}
+      ${gsPago.length > 1 ? `<div class="note com">Son <b>${gsPago.length}</b> proveedores: se emitirán ${gsPago.length} ${esCheque ? 'cheques' : 'desembolsos'}, uno por proveedor, dentro de la misma operación.</div>` : ''}`;
+  }
+
+  /// De dónde sale el dinero, ya redactado con su preposición: «de la caja», «del banco»,
+  /// «de Banco Atlántida · 010-998-114» según lo que se haya elegido.
+  function destinoFondos() {
+    if (!esBancario(formaPago.metodo)) return formaPago.metodo === 'Efectivo' ? 'de la caja' : 'de la cuenta contable';
+    const banco = bancoDe(formaPago.bancoId);
+    if (!banco) return 'del banco';
+    const cuenta = banco.cuentas.find(c => c.id === formaPago.cuentaId);
+    return cuenta ? `de ${banco.nombre} · ${cuenta.num}` : `de ${banco.nombre}`;
+  }
+
+  const loteRegistrable = () => {
+    const docs = seleccionados();
+    return docs.some(d => montoDe(d) > 0) && !docs.some(d => montoDe(d) > d.saldo + 0.004);
+  };
+
+  function pintarLote() {
+    const aPagar = seleccionados().filter(d => montoDe(d) > 0).length;
+
+    document.getElementById('dr-body').innerHTML = cuerpoLote();
+    const ok = document.getElementById('dr-ok');
+    ok.textContent = aPagar === 1 ? 'Registrar 1 pago' : `Registrar ${aPagar} pagos`;
+    ok.disabled = !loteRegistrable() || !formaPagoCompleta();
+  }
+
+  function abrirLote() {
+    if (state.sel.size === 0) return;
+    modoDrawer = 'lote';
+    drawer.classList.add('wide');
+    document.getElementById('dr-foot').hidden = false;
+
+    const docs = seleccionados();
+    const provs = grupos().length;
+    lote.modo = 'FULL';
+    lote.disponible = +docs.reduce((s, d) => s + d.saldo, 0).toFixed(2);
+    lote.retencion = 0;
+    formaPago.metodos = ['Transferencia', 'Cheque', 'Efectivo'];
+    formaPago.metodo = 'Transferencia';
+    formaPago.bancoId = null;
+    formaPago.cuentaId = null;
+    repartir();
+
+    document.getElementById('dr-title').textContent = `Pagar ${docs.length} documentos`;
+    document.getElementById('dr-sub').innerHTML =
+      `${docs.filter(d => d.tipo === 'FAC').length} factura(s) y ${docs.filter(d => d.tipo === 'COM').length} compromiso(s) · ${provs} proveedor(es)`;
+
+    pintarLote();
+    drawer.hidden = false; scrim.hidden = false;
+    document.getElementById('dr-close').focus();
+  }
+
+  // controles del panel (delegados: el cuerpo se re-dibuja en cada cambio)
+  document.getElementById('dr-body').addEventListener('change', e => {
+    // forma de pago: sirve igual al pago individual y al lote
+    if (e.target.id === 'f-metodo') {
+      formaPago.metodo = e.target.value;
+      formaPago.bancoId = null;          // al cambiar de método se vuelve a elegir banco y cuenta
+      formaPago.cuentaId = null;
+      // el método cambia los números de cheque del lote, así que ahí se repinta todo
+      if (modoDrawer === 'lote') pintarLote(); else repintarFormaPago();
+      return;
+    }
+    if (e.target.id === 'f-banco') {
+      formaPago.bancoId = e.target.value === '' ? null : +e.target.value;
+      formaPago.cuentaId = null;         // las cuentas son del banco elegido: se limpia la anterior
+      repintarFormaPago();
+      return;
+    }
+    if (e.target.id === 'f-cuenta') {
+      formaPago.cuentaId = e.target.value === '' ? null : +e.target.value;
+      repintarFormaPago();
+      return;
+    }
+
+    if (modoDrawer !== 'lote') return;
+    if (e.target.name === 'modo') {
+      lote.modo = e.target.value;
+      if (lote.modo !== 'MANUAL') repartir();
+      pintarLote();
+    } else if (e.target.id === 'l-ret') {
+      lote.retencion = +e.target.value; pintarLote();
+    } else if (e.target.id === 'disp') {
+      lote.disponible = Math.max(0, +String(e.target.value).replace(/,/g, '') || 0);
+      repartir(); pintarLote();
+    } else if (e.target.dataset.monto !== undefined) {
+      const id = +e.target.dataset.monto;
+      lote.montos.set(id, Math.max(0, +String(e.target.value).replace(/,/g, '') || 0));
+      lote.modo = 'MANUAL';
+      pintarLote();
+    }
+  });
+
+  document.getElementById('dr-ok').addEventListener('click', () => {
+    if (modoDrawer === 'lote') registrarLote(); else cerrarPago();
+  });
+
+  function registrarLote() {
+    const docs = seleccionados().filter(d => montoDe(d) > 0);
+    const gs = grupos().filter(g => g.docs.some(d => montoDe(d) > 0));
+    const esCheque = formaPago.metodo === 'Cheque';
+    const origen = destinoFondos();
+    const recibos = [];
+
+    docs.forEach((d, i) => {
+      const m = montoDe(d);
+      recibos.push({ doc: d.doc, tipo: d.tipo, num: 3120 + i, monto: m, saldaba: m >= d.saldo - 0.004 });
+      d.abonado = +(d.abonado + m).toFixed(2);
+      d.saldo = +(d.total - d.abonado).toFixed(2);
+      d.estado = d.saldo <= 0 ? 3 : 2;
+      d.vencido = d.dias !== null && d.dias > 0 && d.saldo > 0;
+    });
+
+    const bruto = recibos.reduce((s, r) => s + r.monto, 0);
+    const ret = +(bruto * lote.retencion / 100).toFixed(2);
+    const comsSaldados = recibos.filter(r => r.tipo === 'COM' && r.saldaba).length;
+
+    document.getElementById('dr-title').textContent = 'Lote registrado';
+    document.getElementById('dr-sub').textContent = `${recibos.length} pago(s) · ${gs.length} desembolso(s)`;
+    document.getElementById('dr-foot').hidden = true;
+    document.getElementById('dr-body').innerHTML = `
+      <div class="done">
+        <div class="tick-big" aria-hidden="true">✓</div>
+        <h5>Se registraron ${recibos.length} pagos</h5>
+        <p>Cada documento conserva su propio comprobante y su partida contable; salieron ${gs.length} desembolso(s) por ${L(bruto - ret)} ${origen}.</p>
+        <ul class="recibos">
+          ${gs.map((g, i) => {
+            const gb = g.docs.reduce((s, d) => s + (recibos.find(r => r.doc === d.doc)?.monto || 0), 0);
+            const gr = +(gb * lote.retencion / 100).toFixed(2);
+            return `<li>
+              <span class="chip neutral">${esCheque ? 'Cheque No. ' + (1045 + i) : formaPago.metodo}</span>
+              <span>${g.prov}</span><span class="r-m">${N(gb - gr)}</span></li>`;
+          }).join('')}
+        </ul>
+        <ul class="recibos">
+          ${recibos.map(r => `<li>
+            <span class="chip ${r.tipo === 'FAC' ? 'fac' : 'com'}">${r.tipo === 'FAC' ? 'Factura' : 'Compromiso'}</span>
+            <span class="r-n">${r.doc}</span>
+            <span class="sub" style="display:inline">comprobante #${r.num}${r.saldaba ? ' · saldado' : ' · parcial'}</span>
+            <span class="r-m">${N(r.monto)}</span></li>`).join('')}
+        </ul>
+        ${comsSaldados > 0 ? `<div class="note com" style="text-align:left">${comsSaldados} compromiso(s) quedaron saldados y se marcan como procesados (decisión D8).</div>` : ''}
+        <div style="display:flex;gap:9px;justify-content:center;flex-wrap:wrap">
+          <button class="btn" type="button" onclick="document.getElementById('dr-cancel').click()">Cerrar</button>
+          <button class="btn primary" type="button">Imprimir comprobantes</button>
+        </div>
+      </div>`;
+
+    state.sel.clear();
+    render();
+  }
+
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-pagar]');
+    if (b && !b.disabled) abrirPago(DATA[+b.dataset.pagar]);
+  });
+  document.getElementById('dr-close').addEventListener('click', cerrarPago);
+  document.getElementById('dr-cancel').addEventListener('click', cerrarPago);
+  scrim.addEventListener('click', cerrarPago);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { cerrarPago(); cerrarMenus(null); } });
+
+  // ---------- pestañas ----------
+  const tabs = [...document.querySelectorAll('.tab')];
+  tabs.forEach(t => t.addEventListener('click', () => {
+    tabs.forEach(x => {
+      const sel = x === t;
+      x.setAttribute('aria-selected', String(sel));
+      document.getElementById(x.getAttribute('aria-controls')).hidden = !sel;
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }));
+
+  render();
+</script>

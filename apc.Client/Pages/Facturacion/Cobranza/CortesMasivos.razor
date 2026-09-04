@@ -1,5 +1,5 @@
 @page "/facturacion/cobranza/cortes-masivos"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Ventas.Cobranza.View)]
 @using SIAD.Core.DTOs.Cobranza
 @using apc.Client.Services.Cobranza
 @using apc.Client.Services.Catalogos

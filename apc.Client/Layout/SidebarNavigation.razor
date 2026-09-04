@@ -1,35 +1,81 @@
-@using Microsoft.AspNetCore.Components.Routing
+﻿@using Microsoft.AspNetCore.Components.Routing
 @using Microsoft.AspNetCore.Components.Authorization
 @using apc.Client.Layout.Navigation
+@using apc.Client.Services
 @using apc.Client.Services.Bancos
+@using apc.Client.Services.Layout
 @using apc.Client.Services.Tenant
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthStateProvider
 @inject TenantCompanyContextClient TenantCompanyContextClient
 @inject ChequeEmisionState ChequeEmision
+@inject IAuthorizationService AuthorizationService
+@inject IJSRuntime JS
 @implements IDisposable
 
-<nav class="sidebar-nav @(IsCollapsed ? "sidebar-nav--collapsed" : "") @(IsMobile ? "sidebar-nav--mobile" : "")">
+<nav class="sidebar-nav @(IsCollapsed ? "sidebar-nav--collapsed" : "") @(IsMobile ? "sidebar-nav--mobile" : "")"
+     aria-label="Navegación principal">
 @if (!IsMobile)
 {
     <div class="sidebar-brand">
-        <i class="bi bi-h-square-fill sidebar-brand__logo"></i>
-        <span class="sidebar-brand__text">HODSOFT</span>
+        <span class="sidebar-brand__text">SIAD</span>
     </div>
 }
 
     @foreach (var navSection in visibleSections)
     {
-        <div class="nav-section">
-            @if (!string.IsNullOrEmpty(navSection.Label))
+        var abierta = EstaAbierta(navSection);
+
+        <div class="nav-section @(navSection.EsPlegable && abierta ? "nav-section--abierta" : "")" @key="navSection.Id">
+            @if (navSection.EsPlegable && AcordeonActivo)
             {
-                <div class="nav-section__label">@navSection.Label</div>
+                <button type="button"
+                        class="nav-section__label"
+                        id="@IdRotulo(navSection)"
+                        aria-controls="@IdPanel(navSection)"
+                        aria-expanded="@(IsCollapsed ? null : (abierta ? "true" : "false"))"
+                        @onclick="() => AlternarSeccionAsync(navSection.Id)">
+                    <span class="nav-section__label-text">@navSection.Label</span>
+                    <i class="bi bi-chevron-down nav-item__chevron" aria-hidden="true"></i>
+                </button>
             }
-            @foreach (var item in navSection.Items)
+            else if (navSection.EsPlegable)
             {
-                <SidebarNavNode Item="@item"
-                                CurrentPath="@currentPath"
-                                IsCollapsed="@IsCollapsed" />
+                @* Sin interactividad no habría forma de desplegar: el rótulo vuelve a ser un
+                   simple encabezado y la sección queda abierta (ver AcordeonActivo). *@
+                <div class="nav-section__label nav-section__label--estatico" id="@IdRotulo(navSection)">
+                    <span class="nav-section__label-text">@navSection.Label</span>
+                </div>
+            }
+
+            @if (navSection.EsPlegable)
+            {
+                @* El panel se pliega con CSS y nunca con @if: quitarlo del árbol destruiría los
+                   SidebarNavNode y al reabrir la sección se perdería qué grupo estaba abierto.
+                   Además aria-controls exige que el elemento referido exista siempre. *@
+                <div class="nav-section__items"
+                     id="@IdPanel(navSection)"
+                     role="group"
+                     aria-labelledby="@IdRotulo(navSection)">
+                    @foreach (var item in navSection.Items)
+                    {
+                        <SidebarNavNode @key="item.Id"
+                                        Item="@item"
+                                        CurrentPath="@currentPath"
+                                        IsCollapsed="@IsCollapsed" />
+                    }
+                </div>
+            }
+            else
+            {
+                @* Inicio: sin rótulo que pulsar, siempre visible. *@
+                @foreach (var item in navSection.Items)
+                {
+                    <SidebarNavNode @key="item.Id"
+                                    Item="@item"
+                                    CurrentPath="@currentPath"
+                                    IsCollapsed="@IsCollapsed" />
+                }
             }
         </div>
     }
@@ -42,6 +88,14 @@
     private string currentPath = "/";
     private IReadOnlyList<SidebarNavSection> visibleSections = Array.Empty<SidebarNavSection>();
 
+    /// <summary>De dónde salió la sección abierta. Decide quién puede pisar a quién.</summary>
+    private enum OrigenApertura { Defecto, Ruta, Usuario }
+
+    private string? seccionAbiertaId;
+    private string? rutaAplicada;
+    private OrigenApertura origen = OrigenApertura.Defecto;
+    private bool restauracionIntentada;
+
     protected override void OnInitialized()
     {
         NavigationManager.LocationChanged += HandleLocationChanged;
@@ -52,30 +106,160 @@
     protected override async Task OnInitializedAsync()
     {
         // Capacidades que dependen de la configuración de la empresa (no de permisos).
+        // Primero se arma el menú con lo único que ya está en memoria: los permisos del
+        // usuario. Antes se esperaba a dos llamadas HTTP (capacidades de la empresa y contexto
+        // de tenant) y, al reconectar el circuito, el menú quedaba EN BLANCO medio segundo —
+        // medido en el navegador. Después se cargan esas dos cosas y se refresca.
+        await ConstruirSeccionesAsync(consultarEmpresa: false);
+
         await ChequeEmision.EnsureLoadedAsync();
-        await ConstruirSeccionesAsync();
+        await ConstruirSeccionesAsync(consultarEmpresa: true);
     }
 
-    private async Task ConstruirSeccionesAsync()
+    // ===== Acordeón =====
+
+    /// <summary>
+    /// Sólo se pliega donde el usuario puede desplegar. Las páginas de /Account/* se sirven
+    /// con render mode nulo (SSR estático) pero pintan este mismo MainLayout: ahí el @onclick
+    /// no se cablea, así que un acordeón dejaría ocho secciones ocultas tras cabeceras
+    /// muertas y sin manera de llegar a ellas. Con AssignedRenderMode nulo se muestran todas
+    /// abiertas, como antes de existir el acordeón.
+    ///
+    /// Durante el PRERENDER de una página interactiva AssignedRenderMode ya viene asignado,
+    /// así que ahí sí se pliega y el estado no salta al conectar el circuito.
+    /// </summary>
+    private bool AcordeonActivo => AssignedRenderMode is not null;
+
+    private bool EstaAbierta(SidebarNavSection s) => !s.EsPlegable || !AcordeonActivo || seccionAbiertaId == s.Id;
+
+    private bool ExisteSeccion(string id) => visibleSections.Any(s => s.Id == id);
+
+    private static string IdRotulo(SidebarNavSection s) => $"navsec-lbl-{s.Id}";
+
+    private static string IdPanel(SidebarNavSection s) => $"navsec-panel-{s.Id}";
+
+    /// <summary>
+    /// Único punto donde la ruta escribe el estado del acordeón. Se llama SÓLO al armar las
+    /// secciones y al navegar; nunca desde OnParametersSet, que se dispara también al
+    /// colapsar o expandir el drawer y reabriría lo que el usuario acaba de cerrar.
+    /// </summary>
+    private void AplicarSeccionDeRuta()
+    {
+        // La sección abierta pudo desaparecer: modo recuperación, cambio de rol o de capacidad.
+        if (seccionAbiertaId is not null && !ExisteSeccion(seccionAbiertaId))
+        {
+            seccionAbiertaId = null;
+            origen = OrigenApertura.Defecto;
+        }
+
+        var rutaNueva = !string.Equals(currentPath, rutaAplicada, StringComparison.Ordinal);
+        rutaAplicada = currentPath;
+
+        // Rearmado sin navegación (p. ej. cambió una capacidad): respeta lo que el usuario
+        // tenga puesto, incluido haber cerrado todo a mano.
+        if (!rutaNueva && (seccionAbiertaId is not null || origen == OrigenApertura.Usuario))
+        {
+            return;
+        }
+
+        // Un item concreto manda sobre el territorio de la sección: los MatchPrefixes de
+        // sección son amplios a propósito y sólo se consultan al agotar los items.
+        var deRuta =
+            visibleSections.FirstOrDefault(s => s.EsPlegable && SidebarPathMatcher.ContienePorItem(s, currentPath))
+            ?? visibleSections.FirstOrDefault(s => s.EsPlegable && SidebarPathMatcher.ContienePorPrefijo(s, currentPath));
+
+        if (deRuta is not null)
+        {
+            seccionAbiertaId = deRuta.Id;
+            origen = OrigenApertura.Ruta;
+        }
+
+        // Si la ruta sigue sin caer en ninguna sección (Inicio, un 404) no se abre ninguna ni
+        // se cierra lo que hubiera: elegir una arbitraria —la primera de la lista— sólo servía
+        // para que el usuario la viera cerrarse sola al llegar la recordada del navegador.
+        // Ojo: eso significa que llegando a Inicio DESDE otra sección, esa sección sigue
+        // abierta; sólo en carga fría el riel queda con todas las cabeceras plegadas.
+    }
+
+    private async Task AlternarSeccionAsync(string seccionId)
+    {
+        // En modo mini no hay acordeón: se ven todos los iconos. Mismo criterio que
+        // SidebarNavNode.ToggleExpand.
+        if (IsCollapsed)
+        {
+            return;
+        }
+
+        // Exclusividad: al ser un único campo, abrir una cierra la anterior sin más trabajo.
+        seccionAbiertaId = seccionAbiertaId == seccionId ? null : seccionId;
+        origen = OrigenApertura.Usuario;
+        await SidebarAccordionStorage.GuardarAsync(JS, seccionAbiertaId);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // No se mira firstRender: en el primer render visibleSections todavía está vacío
+        // porque ConstruirSeccionesAsync está await-eado. OnAfterRender no corre durante el
+        // prerender ni en el SSR estático de /Account/*, así que aquí el interop es seguro.
+        if (restauracionIntentada || visibleSections.Count == 0)
+        {
+            return;
+        }
+
+        restauracionIntentada = true;
+
+        // Si la ruta ya decidió, o el usuario ya tocó algo, lo guardado no manda: evita
+        // que la sección salte después del primer pintado.
+        if (origen != OrigenApertura.Defecto)
+        {
+            return;
+        }
+
+        var guardada = await SidebarAccordionStorage.LeerAsync(JS);
+        if (guardada is null)
+        {
+            return;
+        }
+
+        // Releer el origen DESPUÉS del interop: sobre la VPN ese viaje son cientos de
+        // milisegundos, y en esa ventana el usuario pudo pulsar un rótulo o hacer clic en un
+        // enlace. Lo que decidan él o la ruta gana sobre lo que había guardado.
+        if (origen != OrigenApertura.Defecto)
+        {
+            return;
+        }
+
+        // Id huérfano (sección renombrada, quitada, o de un rol que este usuario no tiene).
+        if (guardada.Length > 0 && !ExisteSeccion(guardada))
+        {
+            return;
+        }
+
+        seccionAbiertaId = guardada.Length == 0 ? null : guardada;
+        origen = OrigenApertura.Usuario;
+        StateHasChanged();
+    }
+
+    // ===== Armado de secciones =====
+
+    private async Task ConstruirSeccionesAsync(bool consultarEmpresa = true)
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
         esSuperAdmin = user.IsInRole(SIAD.Core.Constants.RoleNames.SuperAdministrador);
 
+        usuarioActual = user;
+
         var sections = new List<SidebarNavSection>();
         foreach (var section in SidebarNavigationDefinition.Sections)
         {
-            if (string.IsNullOrEmpty(section.RequiredPolicy))
-            {
-                sections.Add(section);
-            }
-            else if (user.IsInRole(SIAD.Core.Constants.RoleNames.SuperAdministrador))
+            if (await TienePermisoAsync(section.RequiredPolicy))
             {
                 sections.Add(section);
             }
         }
 
-        if (user.Identity?.IsAuthenticated == true)
+        if (consultarEmpresa && user.Identity?.IsAuthenticated == true)
         {
             try
             {
@@ -93,32 +277,42 @@
             }
         }
 
-        visibleSections = FiltrarPorCapacidades(sections);
+        visibleSections = await FiltrarAsync(sections);
+        AplicarSeccionDeRuta();
     }
 
-    // Ítems condicionados a la configuración de la empresa (hoy solo el cheque manual).
-    private IReadOnlyList<SidebarNavSection> FiltrarPorCapacidades(IEnumerable<SidebarNavSection> sections)
+    // Filtra por permiso del usuario, por capacidad de la empresa y por el flag de Super Admin.
+    private async Task<IReadOnlyList<SidebarNavSection>> FiltrarAsync(IEnumerable<SidebarNavSection> sections)
     {
         var resultado = new List<SidebarNavSection>();
 
         foreach (var section in sections)
         {
-            var items = section.Items
-                .Select(FiltrarItemPorCapacidades)
-                .Where(item => item is not null)
-                .Cast<SidebarNavItem>()
-                .ToArray();
+            var items = new List<SidebarNavItem>();
+            foreach (var item in section.Items)
+            {
+                var filtrado = await FiltrarItemAsync(item);
+                if (filtrado is not null)
+                {
+                    items.Add(filtrado);
+                }
+            }
 
-            if (items.Length == 0)
+            if (items.Count == 0)
             {
                 continue;
             }
 
             resultado.Add(new SidebarNavSection
             {
+                Id = section.Id,
                 Label = section.Label,
                 Items = items,
-                RequiredPolicy = section.RequiredPolicy
+                RequiredPolicy = section.RequiredPolicy,
+                // Sin esto el territorio de la sección se pierde aquí —y esta copia es la
+                // que acaba en visibleSections—, así que las rutas sin entrada propia en el
+                // menú dejarían de abrir su sección.
+                MatchPrefixes = section.MatchPrefixes
             });
         }
 
@@ -126,8 +320,31 @@
     }
 
     private bool esSuperAdmin;
+    private System.Security.Claims.ClaimsPrincipal usuarioActual = new(new System.Security.Claims.ClaimsIdentity());
 
-    private SidebarNavItem? FiltrarItemPorCapacidades(SidebarNavItem item)
+    /// <summary>
+    /// Evalúa la policy del permiso. Cada policy de <c>PermissionNames.Policies</c> ya incluye la
+    /// cascada endpoint → opción → módulo → legacy, así que el menú oculta exactamente lo mismo
+    /// que la API rechaza, sin duplicar la lógica aquí.
+    /// </summary>
+    private async Task<bool> TienePermisoAsync(string? policy)
+    {
+        if (string.IsNullOrEmpty(policy))
+        {
+            return true;
+        }
+
+        // Las policies ya contemplan el bypass, pero cortar antes evita ~100 evaluaciones por render.
+        if (esSuperAdmin)
+        {
+            return true;
+        }
+
+        var resultado = await AuthorizationService.AuthorizeAsync(usuarioActual, policy);
+        return resultado.Succeeded;
+    }
+
+    private async Task<SidebarNavItem?> FiltrarItemAsync(SidebarNavItem item)
     {
         if (item.SoloSuperAdmin && !esSuperAdmin)
         {
@@ -139,26 +356,36 @@
             return null;
         }
 
+        if (!await TienePermisoAsync(item.RequiredPermission))
+        {
+            return null;
+        }
+
         if (!item.HasChildren)
         {
             return item;
         }
 
-        var children = item.Children
-            .Select(FiltrarItemPorCapacidades)
-            .Where(child => child is not null)
-            .Cast<SidebarNavItem>()
-            .ToArray();
-
-        if (children.Length == item.Children.Count)
+        var children = new List<SidebarNavItem>();
+        foreach (var child in item.Children)
         {
-            return item;
+            var filtrado = await FiltrarItemAsync(child);
+            if (filtrado is not null)
+            {
+                children.Add(filtrado);
+            }
         }
 
-        // Un padre sin hijos visibles y sin ruta propia deja de tener sentido.
-        if (children.Length == 0 && string.IsNullOrWhiteSpace(item.NavigateUrl))
+        // Un grupo cuyos hijos quedaron todos ocultos no tiene nada que abrir: se oculta el grupo.
+        // (Los grupos no navegan por sí mismos; su NavigateUrl, cuando existe, apunta al primer hijo.)
+        if (children.Count == 0)
         {
             return null;
+        }
+
+        if (children.Count == item.Children.Count)
+        {
+            return item;
         }
 
         return new SidebarNavItem
@@ -171,6 +398,7 @@
             Children = children,
             MatchExact = item.MatchExact,
             RequiredCapability = item.RequiredCapability,
+            RequiredPermission = item.RequiredPermission,
             SoloSuperAdmin = item.SoloSuperAdmin
         };
     }
@@ -195,26 +423,12 @@
     private void HandleLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         currentPath = GetCurrentPath();
+        AplicarSeccionDeRuta();
         InvokeAsync(StateHasChanged);
     }
 
     private string GetCurrentPath()
-    {
-        var relative = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
-        if (string.IsNullOrWhiteSpace(relative))
-        {
-            return "/";
-        }
-
-        var cleaned = relative.Split('?', '#')[0];
-        if (!cleaned.StartsWith("/"))
-        {
-            cleaned = "/" + cleaned;
-        }
-
-        cleaned = cleaned.TrimEnd('/');
-        return string.IsNullOrEmpty(cleaned) ? "/" : cleaned.ToLowerInvariant();
-    }
+        => SidebarPathMatcher.Normalizar(NavigationManager.ToBaseRelativePath(NavigationManager.Uri));
 
     public void Dispose()
     {
@@ -241,9 +455,11 @@
 
             filteredSections.Add(new SidebarNavSection
             {
+                Id = section.Id,
                 Label = section.Label,
                 Items = filteredItems,
-                RequiredPolicy = section.RequiredPolicy
+                RequiredPolicy = section.RequiredPolicy,
+                MatchPrefixes = section.MatchPrefixes
             });
         }
 
@@ -277,7 +493,9 @@
             MatchPrefixes = filteredPrefixes,
             Children = filteredChildren,
             MatchExact = item.MatchExact,
-            RequiredCapability = item.RequiredCapability
+            RequiredCapability = item.RequiredCapability,
+            RequiredPermission = item.RequiredPermission,
+            SoloSuperAdmin = item.SoloSuperAdmin
         };
     }
 

@@ -12,14 +12,14 @@
 @inject IdentityUserAccessor UserAccessor
 @inject NavigationManager NavigationManager
 
-<PageTitle>Manage email</PageTitle>
+<PageTitle>Administrar el correo</PageTitle>
 <div class="block-content">
     <StatusMessage Message="@message" />
     <EditForm Model="Input" FormName="change-email" OnValidSubmit="OnValidSubmitAsync" method="post" Context="changeemail">
         <DataAnnotationsValidator />
         <ValidationSummary class="text-danger" role="alert" />
         <DxFormLayout CaptionPosition=@CaptionPosition.Vertical>
-            <DxFormLayoutItem Caption="Email" ColSpanMd="12" BeginRow="true">
+            <DxFormLayoutItem Caption="Correo electrónico" ColSpanMd="12" BeginRow="true">
                 <InteractiveServerTextBox Name="email" Value="@email" Enabled="false" />
             </DxFormLayoutItem>
             @if(!isEmailConfirmed) {
@@ -27,14 +27,14 @@
                     <form @onsubmit="OnSendEmailVerificationAsync" @formname="send-verification" id="send-verification-form" method="post">
                         <AntiforgeryToken />
                     </form>
-                    <DxButton CssClass="w-100" SubmitFormOnClick="true" Text="Send verification email" form="send-verification-form"></DxButton>
+                    <DxButton CssClass="w-100" SubmitFormOnClick="true" Text="Enviar correo de verificación" form="send-verification-form"></DxButton>
                 </DxFormLayoutItem>
             }
-            <DxFormLayoutItem Caption="New email" ColSpanMd="12" BeginRow="true">
+            <DxFormLayoutItem Caption="Correo nuevo" ColSpanMd="12" BeginRow="true">
                 <InteractiveServerTextBox Name="Input.NewEmail" Value="@Input.NewEmail" />
             </DxFormLayoutItem>
             <DxFormLayoutItem ColSpanMd="12" BeginRow="true">
-                <DxButton CssClass="w-100" SubmitFormOnClick="true" Text="Change email"></DxButton>
+                <DxButton CssClass="w-100" SubmitFormOnClick="true" Text="Cambiar correo"></DxButton>
             </DxFormLayoutItem>
         </DxFormLayout>
     </EditForm>
@@ -98,7 +98,7 @@
     private sealed class InputModel {
         [Required]
         [EmailAddress]
-        [Display(Name = "New email")]
+        [Display(Name = "Correo nuevo")]
         public string? NewEmail { get; set; }
     }
 }

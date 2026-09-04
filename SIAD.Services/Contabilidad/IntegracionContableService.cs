@@ -619,6 +619,8 @@ public sealed class IntegracionContableService : IIntegracionContableService
         IntegracionContableModulos.Notas => config.activo_notas,
         IntegracionContableModulos.Miscelaneos => config.activo_miscelaneos,
         IntegracionContableModulos.Proveedores => config.activo_proveedores,
+        IntegracionContableModulos.Almacen => config.activo_almacen,
+        IntegracionContableModulos.Compras => config.activo_compras,
         _ => throw new ArgumentOutOfRangeException(nameof(module), module, "Módulo de integración sin flag de activación mapeado.")
     };
 
@@ -643,6 +645,12 @@ public sealed class IntegracionContableService : IIntegracionContableService
                 break;
             case IntegracionContableModulos.Proveedores:
                 config.activo_proveedores = valor;
+                break;
+            case IntegracionContableModulos.Almacen:
+                config.activo_almacen = valor;
+                break;
+            case IntegracionContableModulos.Compras:
+                config.activo_compras = valor;
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(module), module, "Módulo de integración sin flag de activación mapeado.");

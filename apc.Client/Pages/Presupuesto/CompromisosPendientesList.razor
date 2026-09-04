@@ -1,0 +1,258 @@
+@page "/presupuesto/compromisos"
+@attribute [Authorize(Policy = PermissionNames.Contabilidad.View)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Presupuesto
+@using apc.Client.Services
+@using apc.Client.Services.Presupuesto
+
+@inject PresupuestoEjecucionClient EjecucionClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Compromisos pendientes</PageTitle>
+
+<DxToastProvider Name="CompromisosPendientesToast" MaxToastCount="4" StickToViewport="true" />
+
+<div class="page-container">
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Compromisos pendientes</h2>
+            <p class="page-subtitle">Órdenes aprobadas que todavía retienen presupuesto sin ejecutar</p>
+        </div>
+    </div>
+
+    <div class="modern-card summary-card">
+        <div class="summary-item">
+            <div class="summary-label">Órdenes</div>
+            <div class="summary-value">@datos.Count.ToString("N0")</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">Saldo retenido</div>
+            <div class="summary-value">@datos.Sum(d => d.SaldoComprometido).ToString("N2")</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">Con más de 90 días</div>
+            <div class="summary-value">@datos.Count(d => d.DiasAntiguedad > 90).ToString("N0")</div>
+        </div>
+    </div>
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="cargando" IsContentBlocked="true" Text="Cargando..." />
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@datos" KeyFieldName="Id" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox @bind-Text="busqueda" NullText="Buscar O/C, proveedor o cuenta"
+                                   CssClass="filtro-texto" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                   BindValueMode="BindValueMode.OnDelayedInput" />
+
+                        <DxSpinEdit @bind-Value="diasMinimos" NullText="Días mínimos" MinValue="0" MaxValue="3650"
+                                    CssClass="filtro-dias" />
+
+                        <DxButton Text="Filtrar" IconCssClass="bi bi-funnel"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" />
+
+                        <DxButton Text="PDF" IconCssClass="bi bi-file-earmark-pdf"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="AbrirPdf" />
+
+                        <DxButton Text="Excel" IconCssClass="bi bi-file-earmark-excel"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="AbrirExcel" />
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Compromisos: <span class="fw-bold">@datos.Count.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoCompromisoPendienteDto.DocumentoNumero)" Caption="O/C" Width="100px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is PresupuestoCompromisoPendienteDto item)
+                            {
+                                <span class="font-monospace">@(item.DocumentoNumero ?? item.DocumentoId.ToString())</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoCompromisoPendienteDto.Fecha)" Caption="Fecha"
+                                      Width="110px" DisplayFormat="dd/MM/yyyy" />
+
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoCompromisoPendienteDto.Proveedor)" Caption="Proveedor" MinWidth="180">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is PresupuestoCompromisoPendienteDto item)
+                            {
+                                @(string.IsNullOrWhiteSpace(item.Proveedor) ? item.CodProveedor : item.Proveedor)
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoCompromisoPendienteDto.ConCuentaCode)" Caption="Partida" Width="160px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is PresupuestoCompromisoPendienteDto item)
+                            {
+                                <span class="font-monospace">@item.ConCuentaCode</span>
+                                @if (!string.IsNullOrWhiteSpace(item.CuentaNombre))
+                                {
+                                    <div class="text-muted small">@item.CuentaNombre</div>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoCompromisoPendienteDto.MontoComprometido)" Caption="Comprometido"
+                                      Width="130px" DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoCompromisoPendienteDto.MontoDevengado)" Caption="Recibido"
+                                      Width="120px" DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoCompromisoPendienteDto.SaldoComprometido)" Caption="Saldo retenido"
+                                      Width="140px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is PresupuestoCompromisoPendienteDto item)
+                            {
+                                <span class="fw-bold">@item.SaldoComprometido.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoCompromisoPendienteDto.DiasAntiguedad)" Caption="Antigüedad"
+                                      Width="120px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is PresupuestoCompromisoPendienteDto item)
+                            {
+                                <span class="badge-antiguedad @ClaseAntiguedad(item.DiasAntiguedad)">@item.DiasAntiguedad d</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="" Width="60px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is PresupuestoCompromisoPendienteDto item)
+                            {
+                                <button type="button" class="btn-icon btn-edit" title="Abrir la orden de compra"
+                                        @onclick="() => AbrirOrden(item)">
+                                    <i class="bi bi-box-arrow-up-right"></i>
+                                </button>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">
+                        No hay compromisos con saldo pendiente. Todo lo aprobado ya se recibió o se liberó.
+                    </div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<PdfPreviewPopup @ref="pdfPopup" />
+
+@code {
+    private DxGrid? grid;
+    private PdfPreviewPopup? pdfPopup;
+    private const string GridLayoutStorageKey = "presupuesto-compromisos-grid-layout";
+
+    private List<PresupuestoCompromisoPendienteDto> datos = new();
+    private bool cargando = true;
+
+    private string? busqueda;
+    private int? diasMinimos;
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        cargando = true;
+        try
+        {
+            datos = await EjecucionClient.ListarCompromisosAsync(new PresupuestoCompromisoFilterDto
+            {
+                Search = busqueda,
+                DiasMinimos = diasMinimos
+            });
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    /// <summary>
+    /// Lleva a la orden que retiene el saldo. Desde ahí se la puede cancelar o cerrar, que es
+    /// justamente lo que libera el presupuesto.
+    /// </summary>
+    private void AbrirOrden(PresupuestoCompromisoPendienteDto item)
+    {
+        if (item.DocumentoTipo == "ORDEN_COMPRA")
+        {
+            Navigation.NavigateTo($"/almacen/ordenes-compra/{item.DocumentoId}/editar");
+        }
+    }
+
+    /// <summary>
+    /// PDF y Excel salen del mismo reporte de servidor con los filtros de la pantalla, no de lo
+    /// que el grid tenga paginado.
+    /// </summary>
+    private PresupuestoCompromisoFilterDto FiltroActual() => new()
+    {
+        Search = busqueda,
+        DiasMinimos = diasMinimos
+    };
+
+    private void AbrirPdf()
+        => pdfPopup?.Mostrar(PresupuestoEjecucionClient.GetCompromisosPdfUrl(FiltroActual()),
+                             "Compromisos presupuestarios pendientes");
+
+    /// <summary>
+    /// Ver la nota en PresupuestoEjecucionList: <c>window.open</c> lo bloquea el navegador bajo
+    /// InteractiveServer; el enlace creado y pulsado por JS sí descarga.
+    /// </summary>
+    private async Task AbrirExcel()
+        => await JS.InvokeVoidAsync("siad.downloadFromUrl",
+               PresupuestoEjecucionClient.GetCompromisosExcelUrl(FiltroActual()),
+               $"compromisos_pendientes_{DateTime.Now:yyyyMMdd_HHmm}.xlsx");
+
+    private static string ClaseAntiguedad(int dias) => dias switch
+    {
+        > 180 => "antiguedad-critica",
+        > 90 => "antiguedad-alta",
+        _ => "antiguedad-normal"
+    };
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private void Toast(string titulo, string texto, ToastRenderStyle estilo)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = "CompromisosPendientesToast",
+            Title = titulo,
+            Text = texto,
+            RenderStyle = estilo
+        });
+}

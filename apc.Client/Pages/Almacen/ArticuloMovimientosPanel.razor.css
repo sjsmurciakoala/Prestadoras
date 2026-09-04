@@ -89,3 +89,13 @@
 ::deep .grid-solicitudes .dxbs-table-row:hover {
     background: rgba(13, 110, 253, 0.04) !important;
 }
+
+/* Visor de PDF embebido dentro del popup: el iframe llena el cuerpo. */
+.pdf-frame {
+    width: 100%;
+    height: calc(90vh - 92px);
+    min-height: 400px;
+    border: 0;
+    border-radius: 6px;
+    background: #f6f8fb;
+}

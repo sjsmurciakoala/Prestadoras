@@ -10,7 +10,7 @@ namespace SIAD.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Eliminar tablas antiguas (ahora todo est· en con_configuracion_sistema)
+            // Eliminar tablas antiguas (ahora todo est√° en con_configuracion_sistema)
             // Orden importante: eliminar primero las que tienen FK a otras
             
             migrationBuilder.DropTable(

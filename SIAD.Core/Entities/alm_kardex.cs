@@ -43,17 +43,24 @@ public partial class alm_kardex : ICompanyScopedEntity
     public string? observacion { get; set; }
 
     /// <summary>
-    /// Idempotencia por MOVIMIENTO (línea), no por documento. Determinista desde la
-    /// identidad del movimiento: (documento_tipo, documento_id, línea), o
-    /// (articulo_id, bodega_id) en CARGA_INICIAL. Reintentar el mismo posteo no duplica
-    /// el asiento (índice único por company_id + uuid). NULL = histórico SIMAFI,
-    /// no posteado por el motor.
+    /// Idempotencia por MOVIMIENTO (línea), no por documento. Determinista (UUIDv5 sobre
+    /// el namespace de inventario, ver <c>SIAD.Core.Utilities.UuidV5</c>):
+    /// <list type="bullet">
+    ///   <item><c>CARGA_INICIAL</c> → (company_id, alm_articulo_bodega.id, <b>intento</b>),
+    ///   donde intento = 1 + aperturas del par ya revertidas. Ese discriminador es lo que
+    ///   permite reabrir un par tras una reversa sin chocar con el índice único.</item>
+    ///   <item><c>REVERSA</c> → (company_id, id del asiento revertido).</item>
+    ///   <item>el resto → (documento_tipo, company_id, documento_id, alm_articulo_bodega.id).</item>
+    /// </list>
+    /// Reintentar el mismo posteo no duplica el asiento (índice único por company_id +
+    /// uuid). NULL = histórico SIMAFI, no posteado por el motor.
     /// </summary>
     public Guid? uuid { get; set; }
 
     /// <summary>
     /// Tipo del documento que originó el asiento. Vocabulario cerrado:
-    /// ver <see cref="SIAD.Core.Constants.TipoDocumentoInventario"/>.
+    /// ver <see cref="SIAD.Core.Constants.TipoDocumentoInventario"/>. Va SIEMPRE acompañado
+    /// de <see cref="uuid"/>: o están los dos, o ninguno (CHECK <c>ck_alm_kardex_libro_nuevo</c>).
     /// </summary>
     public string? documento_tipo { get; set; }
 

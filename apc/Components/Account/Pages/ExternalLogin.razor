@@ -17,24 +17,24 @@
 @inject IdentityRedirectManager RedirectManager
 @inject ILogger<ExternalLogin> Logger
 
-<PageTitle>Register</PageTitle>
+<PageTitle>Registrarse</PageTitle>
 
 <div class="main-content">
     <div class="block-content">
         <StatusMessage Message="@message" />
         <div class="title">
-            <div class="title-header-text">Register</div>
+            <div class="title-header-text">Registrarse</div>
             <div class="title-content-text">Associate your @ProviderDisplayName account.</div>
         </div>
         <EditForm Model="Input" OnValidSubmit="OnValidSubmitAsync" FormName="confirmation" Context="ExternalLogin" method="post">
             <DataAnnotationsValidator />
             <ValidationSummary class="text-danger" role="alert" />
             <DxFormLayout CaptionPosition=@CaptionPosition.Vertical>
-                <DxFormLayoutItem Caption="Email" ColSpanMd="12" BeginRow="true">
+                <DxFormLayoutItem Caption="Correo electrónico" ColSpanMd="12" BeginRow="true">
                     <InteractiveServerTextBox Name="Input.Email" Value="@Input.Email" />
                 </DxFormLayoutItem>
                 <DxFormLayoutItem ColSpanMd="12" BeginRow="true">
-                    <DxButton CssClass="w-100" SubmitFormOnClick="true" Text="Register"></DxButton>
+                    <DxButton CssClass="w-100" SubmitFormOnClick="true" Text="Registrarse"></DxButton>
                 </DxFormLayoutItem>
             </DxFormLayout>
         </EditForm>

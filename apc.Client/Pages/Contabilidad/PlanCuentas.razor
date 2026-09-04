@@ -1,5 +1,5 @@
 ﻿@page "/contabilidad/plan-cuentas"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Contabilidad.View)]
 @inject HttpClient Http
 @inject NavigationManager NavigationManager
 

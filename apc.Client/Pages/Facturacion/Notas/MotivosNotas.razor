@@ -1,5 +1,5 @@
 ﻿@page "/facturacion/notas/motivos"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Configuracion.View)]
 
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.NotasCreditoDebito
@@ -10,7 +10,7 @@
 
 <PageTitle>SIAD - Motivos de NC / ND</PageTitle>
 
-<DxToastProvider Name="MotivosToast" MaxToastCount="4" />
+<DxToastProvider Name="MotivosToast" MaxToastCount="4" StickToViewport="true" />
 
 <div class="notas-page">
 

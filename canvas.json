@@ -1,0 +1,27 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 640, "h": 620, "title": "Nuevo nivel · Configuración" },
+    { "file": "Aprobadores.dc.html", "x": 720, "y": 0, "w": 780, "h": 560, "title": "Aprobadores del nivel · Configuración" },
+    { "file": "EliminarNivel.dc.html", "x": 1580, "y": 0, "w": 600, "h": 520, "title": "Eliminar nivel · Configuración" },
+    { "file": "EnviarAprobacion.dc.html", "x": 0, "y": 760, "w": 590, "h": 560, "title": "Enviar a aprobación · Orden de compra" },
+    { "file": "Firmar.dc.html", "x": 670, "y": 760, "w": 620, "h": 640, "title": "Firmar · Mis aprobaciones" },
+    { "file": "Rechazar.dc.html", "x": 1370, "y": 760, "w": 620, "h": 700, "title": "Rechazar · Mis aprobaciones" }
+  ],
+  "annotations": [
+    {
+      "id": "nota-config",
+      "x": 0,
+      "y": -150,
+      "w": 420,
+      "text": "Configuración → Aprobaciones\n\nLos tres modales que arman la escalera. El de eliminar aclara que los documentos en circulación no se ven afectados."
+    },
+    {
+      "id": "nota-operacion",
+      "x": 0,
+      "y": 610,
+      "w": 420,
+      "text": "Operación diaria\n\nConfirmar acción sale de la lista de órdenes; firmar y rechazar, de Mis aprobaciones. Verde = la orden avanza, rojo = se detiene."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

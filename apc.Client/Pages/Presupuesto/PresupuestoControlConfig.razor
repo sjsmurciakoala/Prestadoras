@@ -1,0 +1,194 @@
+@page "/presupuesto/control"
+@attribute [Authorize(Policy = PermissionNames.Contabilidad.View)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Presupuesto
+@using apc.Client.Services
+@using apc.Client.Services.Presupuesto
+
+@inject PresupuestoEjecucionClient EjecucionClient
+@inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Control presupuestario</PageTitle>
+
+<DxToastProvider Name="PresupuestoControlToast" MaxToastCount="4" StickToViewport="true" />
+
+<div class="page-container">
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Control presupuestario</h2>
+            <p class="page-subtitle">Qué hace el sistema cuando una operación no tiene presupuesto</p>
+        </div>
+    </div>
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="cargando" IsContentBlocked="true" Text="Cargando..." />
+
+        <div class="aviso-encendido">
+            <i class="bi bi-info-circle"></i>
+            <div>
+                Antes de pasar a <strong>Bloqueo</strong>, conviene dejarlo un ciclo en
+                <strong>Advertencia</strong>: registra el consumo y deja pasar, así se ven las cuentas
+                mal presupuestadas sin frenar la operación.
+                <div class="mt-1">
+                    El control solo mira las cuentas marcadas como presupuestables en el plan de cuentas.
+                    Si ninguna cuenta de la operación lo está, encenderlo no cambia nada.
+                </div>
+            </div>
+        </div>
+
+        <div class="modulos">
+            @foreach (var m in modulos)
+            {
+                var conectado = PresupuestoControlModulos.EstaConectado(m.Modulo);
+
+                <div class="modulo-card @(conectado ? string.Empty : "modulo-reservado")">
+                    <div class="modulo-cabecera">
+                        <div>
+                            <div class="modulo-nombre">@m.ModuloDescripcion</div>
+                            <div class="modulo-detalle">@PresupuestoControlModulos.Detalle(m.Modulo)</div>
+                        </div>
+                        <span class="badge-modo modo-@m.Modo">@m.ModoDescripcion</span>
+                    </div>
+
+                    @if (conectado)
+                    {
+                        <div class="modulo-controles">
+                            <div class="control-campo">
+                                <label class="form-label small fw-semibold">Modo</label>
+                                <DxComboBox Data="@modosDisponibles" @bind-Value="m.Modo"
+                                            TextFieldName="@nameof(ModoOpcion.Etiqueta)"
+                                            ValueFieldName="@nameof(ModoOpcion.Codigo)"
+                                            CssClass="w-100" />
+                                <div class="form-text">@PresupuestoControlModos.Detalle(m.Modo)</div>
+                            </div>
+
+                            @if (m.Modulo == PresupuestoControlModulos.ComprasOc)
+                            {
+                                <div class="control-campo">
+                                    <DxCheckBox @bind-Checked="m.ExigePresupuestoAprobado">
+                                        Exigir presupuesto aprobado
+                                    </DxCheckBox>
+                                    <div class="form-text">
+                                        Si se desmarca, un presupuesto vigente pero sin aprobar también sirve para comprometer.
+                                    </div>
+                                </div>
+                            }
+
+                            @if (m.Modulo == PresupuestoControlModulos.ComprasFactura)
+                            {
+                                <div class="control-campo">
+                                    <label class="form-label small fw-semibold">Tolerancia sobre la orden (%)</label>
+                                    <DxSpinEdit @bind-Value="m.ToleranciaPct" MinValue="0" MaxValue="100"
+                                                Increment="0.5m" CssClass="w-100" />
+                                    <div class="form-text">
+                                        Cuánto puede facturar el proveedor por encima de lo comprometido sin exigir disponible.
+                                    </div>
+                                </div>
+
+                                <div class="control-campo">
+                                    <label class="form-label small fw-semibold">Compras sin orden</label>
+                                    <DxComboBox Data="@opcionesSinOrden" @bind-Value="m.PermiteDevengoSinOc"
+                                                TextFieldName="@nameof(ModoOpcion.Etiqueta)"
+                                                ValueFieldName="@nameof(ModoOpcion.Codigo)"
+                                                CssClass="w-100" />
+                                    <div class="form-text">
+                                        Una factura se puede registrar sin orden de compra: esto decide si eso consume presupuesto.
+                                    </div>
+                                </div>
+                            }
+
+                            <div class="control-acciones">
+                                <DxButton Text="Guardar" IconCssClass="bi bi-save"
+                                          RenderStyle="ButtonRenderStyle.Primary"
+                                          Enabled="@(!guardando)"
+                                          Click="@(() => GuardarAsync(m))" />
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="modulo-nota">
+                            Este módulo todavía usa su propio mecanismo y no pasa por este control.
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private sealed class ModoOpcion
+    {
+        public short Codigo { get; init; }
+        public string Etiqueta { get; init; } = string.Empty;
+    }
+
+    private readonly List<ModoOpcion> modosDisponibles = new()
+    {
+        new ModoOpcion { Codigo = PresupuestoControlModos.Apagado,     Etiqueta = "Apagado" },
+        new ModoOpcion { Codigo = PresupuestoControlModos.Advertencia, Etiqueta = "Advertencia" },
+        new ModoOpcion { Codigo = PresupuestoControlModos.Bloqueo,     Etiqueta = "Bloqueo" }
+    };
+
+    private readonly List<ModoOpcion> opcionesSinOrden = new()
+    {
+        new ModoOpcion { Codigo = 0, Etiqueta = "Prohibir la compra sin orden" },
+        new ModoOpcion { Codigo = 1, Etiqueta = "Consumir el disponible" },
+        new ModoOpcion { Codigo = 2, Etiqueta = "Solo advertir" }
+    };
+
+    private List<PresupuestoControlConfigDto> modulos = new();
+    private bool cargando = true;
+    private bool guardando;
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        cargando = true;
+        try
+        {
+            modulos = await EjecucionClient.ListarConfiguracionAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private async Task GuardarAsync(PresupuestoControlConfigDto dto)
+    {
+        guardando = true;
+        try
+        {
+            await EjecucionClient.GuardarConfiguracionAsync(dto);
+            Toast("Éxito", $"{dto.ModuloDescripcion}: {dto.ModoDescripcion}.", ToastRenderStyle.Success);
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+            // El modo mostrado dejaría de reflejar lo guardado: se recarga desde el servidor.
+            await CargarAsync();
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    private void Toast(string titulo, string texto, ToastRenderStyle estilo)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = "PresupuestoControlToast",
+            Title = titulo,
+            Text = texto,
+            RenderStyle = estilo
+        });
+}

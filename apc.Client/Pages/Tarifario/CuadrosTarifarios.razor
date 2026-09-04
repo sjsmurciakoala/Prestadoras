@@ -1,5 +1,5 @@
 ﻿@page "/tarifario/cuadros"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Configuracion.View)]
 
 @using SIAD.Core.DTOs.Tarifario
 @using SIAD.Core.DTOs.Common

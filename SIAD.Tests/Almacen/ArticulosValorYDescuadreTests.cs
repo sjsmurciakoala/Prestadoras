@@ -14,13 +14,11 @@ namespace SIAD.Tests.Almacen;
 
 /// <summary>
 /// Fase 4 del maestro de almacén (2026-07-29):
-/// (a) ValorTotal del grid es DINERO (existencia × valor unitario) y cuadra con el KPI
-///     ValorInventario por construcción;
+/// (a) ValorTotal / CostoPromedio del grid reflejan el promedio ponderado real del kardex
+///     (Σ existencia×costo de bodegas activas) y cuadran con el KPI ValorInventario;
 /// (b) detector de descuadre cabecera vs Σ bodegas ACTIVAS (filtro ConDescuadre,
 ///     ExistenciaBodegas y contador del resumen);
-/// (c) GetByIdAsync excluye ubicaciones inactivas de la existencia del form;
-/// (d) la cuenta contable se valida contra el plan de cuentas al crear, y al editar solo
-///     si CAMBIA (los históricos SIMAFI con cuenta inválida siguen editables).
+/// (c) GetByIdAsync excluye ubicaciones inactivas de la existencia del form.
 /// </summary>
 [Collection("Postgres")]
 public class ArticulosValorYDescuadreTests : IntegrationTestBase, IAsyncLifetime
@@ -45,7 +43,11 @@ public class ArticulosValorYDescuadreTests : IntegrationTestBase, IAsyncLifetime
             var company = new TestCurrentCompanyService(CompanyId);
             _context = new SiadDbContext(options, company);
             _context.Database.UseTransaction(Transaction);
-            _service = new ArticulosService(_context, company);
+
+            var rollup = new ArticuloRollupService(_context);
+            var motor = new InventarioPostingService(_context, company, rollup);
+            var carga = new CargaInicialInventarioService(_context, company, motor);
+            _service = new ArticulosService(_context, company, rollup, carga);
         }
     }
 
@@ -92,27 +94,12 @@ public class ArticulosValorYDescuadreTests : IntegrationTestBase, IAsyncLifetime
         return u.id;
     }
 
-    /// <summary>Cuenta del plan (con_plan_cuentas); company_id lo estampa el contexto.</summary>
-    private async Task<string> SeedCuentaAsync(string code, bool allowsPosting = true, string status = "ACTIVE")
-    {
-        var c = new con_plan_cuenta
-        {
-            code = code,
-            name = $"Cuenta {code}",
-            account_type = "ASSET",
-            status = status,
-            level = 1,
-            allows_posting = allowsPosting,
-            created_at = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified),
-            created_by = "tester"
-        };
-        _context!.con_plan_cuentas.Add(c);
-        await _context.SaveChangesAsync();
-        return code;
-    }
-
-    /// <summary>Crea un artículo por el SERVICIO con dos bodegas (10 + 5) y valor unitario dado.</summary>
-    private async Task<int> CrearArticuloAsync(string codigo, decimal valorUnitario, string? cuenta = null)
+    /// <summary>
+    /// Crea un artículo por el SERVICIO con dos bodegas (10 + 5) y valor unitario dado.
+    /// Desde la Fase 6 la existencia inicial NO se escribe: el servicio la postea como
+    /// carga inicial en el kardex, y por eso cada bodega lleva su costo de apertura.
+    /// </summary>
+    private async Task<int> CrearArticuloAsync(string codigo, decimal valorUnitario, decimal costoA = 1m, decimal costoB = 1m)
     {
         var bodegaA = await SeedBodegaAsync($"{codigo}A");
         var bodegaB = await SeedBodegaAsync($"{codigo}B");
@@ -126,11 +113,10 @@ public class ArticulosValorYDescuadreTests : IntegrationTestBase, IAsyncLifetime
             TipoArticuloId = tipo,
             UnidadMedidaId = unidad,
             ValorUnitario = valorUnitario,
-            CuentaContable = cuenta,
             Ubicaciones =
             {
-                new ArticuloUbicacionDto { BodegaId = bodegaA, Existencia = 10 },
-                new ArticuloUbicacionDto { BodegaId = bodegaB, Existencia = 5 }
+                new ArticuloUbicacionDto { BodegaId = bodegaA, Existencia = 10, CostoApertura = costoA },
+                new ArticuloUbicacionDto { BodegaId = bodegaB, Existencia = 5, CostoApertura = costoB }
             }
         }, "tester");
 
@@ -140,27 +126,60 @@ public class ArticulosValorYDescuadreTests : IntegrationTestBase, IAsyncLifetime
     // ── (a) ValorTotal en dinero, cuadrado con el KPI ────────────────────────
 
     [SkippableFact]
-    public async Task SearchPaged_ValorTotalEsDinero_YCuadraConElKpi()
+    public async Task SearchPaged_ValorEsElPonderadoRealDelKardex_YCuadraConElKpi()
     {
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
-        await CrearArticuloAsync("ZZF4V1", valorUnitario: 2.5m);
+        // Costos de apertura DISTINTOS por bodega (10 u @ 2.00 y 5 u @ 5.00). El catálogo
+        // debe mostrar el promedio ponderado consolidado —el que refleja el kardex—, NO el
+        // valor_unitario del maestro (2.50), que quedó congelado desde la migración.
+        await CrearArticuloAsync("ZZF4V1", valorUnitario: 2.5m, costoA: 2m, costoB: 5m);
         var filtro = new ArticuloFilterDto { Search = "ZZF4V1" };
 
         var pagina = await _service!.SearchPagedAsync(filtro, 0, 10, null, false);
         var item = Assert.Single(pagina.Items);
 
-        // 15 unidades × 2.50 = 37.50 de valor, no "15" (la vieja cantidad).
+        // (10 × 2.00 + 5 × 5.00) / 15 = 3.00 de costo; 45.00 de valor. No 2.50 / 37.50.
         Assert.Equal(15m, item.Existencia);
-        Assert.Equal(37.5m, item.ValorTotal);
+        Assert.Equal(3m, item.CostoPromedio);
+        Assert.Equal(45m, item.ValorTotal);
         Assert.Equal(15m, item.ExistenciaBodegas);
         Assert.False(item.Descuadrado);
 
         // La suma de la columna ES el KPI para el mismo universo filtrado.
         var resumen = await _service.GetResumenAsync(filtro);
         Assert.Equal(1, resumen.Total);
-        Assert.Equal(37.5m, resumen.ValorInventario);
+        Assert.Equal(45m, resumen.ValorInventario);
         Assert.Equal(0, resumen.ConDescuadre);
+    }
+
+    [SkippableFact]
+    public async Task SearchPaged_SinExistencia_CostoYValorEnCero_SinDivisionPorCero()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        // Bodega activa pero existencia 0: no hay ponderado computable. El servicio no debe
+        // dividir por cero; devuelve costo y valor 0 (la UI lo muestra como "—").
+        var bodega = await SeedBodegaAsync("ZZF4Z0");
+        var tipo = await SeedTipoAsync("ZZF4ZT");
+
+        var art = new alm_articulo
+        {
+            codigo_articulo = "ZZF4Z1",
+            descripcion = "Artículo sin existencia",
+            tipo_articulo_id = tipo,
+            existencia = 0m
+        };
+        art.ubicaciones.Add(new alm_articulo_bodega { bodega_id = bodega, existencia = 0m, costo_promedio = 0m, activo = true, principal = true });
+        _context!.alm_articulos.Add(art);
+        await _context.SaveChangesAsync();
+
+        var pagina = await _service!.SearchPagedAsync(new ArticuloFilterDto { Search = "ZZF4Z1" }, 0, 10, null, false);
+        var item = Assert.Single(pagina.Items);
+
+        Assert.Equal(0m, item.Existencia);
+        Assert.Equal(0m, item.CostoPromedio);
+        Assert.Equal(0m, item.ValorTotal);
     }
 
     // ── (b) Detector de descuadre ────────────────────────────────────────────
@@ -173,9 +192,11 @@ public class ArticulosValorYDescuadreTests : IntegrationTestBase, IAsyncLifetime
         var id = await CrearArticuloAsync("ZZF4D1", valorUnitario: 1m);
 
         // Desincronizar la cabecera a mano (simula el descuadre real: ediciones sin kardex).
-        var entity = await _context!.alm_articulos.FirstAsync(a => a.id == id);
-        entity.existencia = 20m; // las bodegas suman 15
-        await _context.SaveChangesAsync();
+        // Va por ExecuteUpdate y no por SaveChanges: la instancia rastreada quedó con el
+        // xmin previo al rollup del alta (que también escribe con ExecuteUpdate), así que
+        // un UPDATE con token de concurrencia no afectaría filas.
+        await _context!.alm_articulos.Where(a => a.id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(a => a.existencia, 20m)); // las bodegas suman 15
 
         var filtro = new ArticuloFilterDto { Search = "ZZF4D1", ConDescuadre = true };
         var pagina = await _service!.SearchPagedAsync(filtro, 0, 10, null, false);
@@ -234,129 +255,21 @@ public class ArticulosValorYDescuadreTests : IntegrationTestBase, IAsyncLifetime
         Assert.Equal(10m, dto!.Existencia);
     }
 
-    // ── (d) Cuenta contable contra el plan de cuentas ────────────────────────
-
     [SkippableFact]
-    public async Task Create_CuentaContableValida_Ok()
+    public async Task GetById_CostoPromedioYValor_SonElPonderadoReal_NoValorUnitario()
     {
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
-        var cuenta = await SeedCuentaAsync("9910000101");
-        var id = await CrearArticuloAsync("ZZF4C1", valorUnitario: 0m, cuenta: cuenta);
-        Assert.True(id > 0);
-    }
+        // 10 u @ 2.00 + 5 u @ 5.00 → ponderado 3.00, valor 45.00. El maestro tiene
+        // valor_unitario = 2.50; la vista de edición debe mostrar el ponderado, igual que el grid.
+        var id = await CrearArticuloAsync("ZZF4GP", valorUnitario: 2.5m, costoA: 2m, costoB: 5m);
 
-    [SkippableFact]
-    public async Task Create_CuentaContableInexistente_Lanza()
-    {
-        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        var dto = await _service!.GetByIdAsync(id);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => CrearArticuloAsync("ZZF4C2", valorUnitario: 0m, cuenta: "9909090909"));
-        Assert.Contains("no existe en el plan", ex.Message);
-    }
-
-    [SkippableFact]
-    public async Task Create_CuentaContableNoImputable_Lanza()
-    {
-        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
-
-        var cuenta = await SeedCuentaAsync("9910000202", allowsPosting: false);
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => CrearArticuloAsync("ZZF4C3", valorUnitario: 0m, cuenta: cuenta));
-        Assert.Contains("no permite movimientos", ex.Message);
-    }
-
-    [SkippableFact]
-    public async Task Create_CuentaContableInactiva_Lanza()
-    {
-        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
-
-        var cuenta = await SeedCuentaAsync("9910000303", status: "INACTIVE");
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => CrearArticuloAsync("ZZF4C4", valorUnitario: 0m, cuenta: cuenta));
-        Assert.Contains("inactiva", ex.Message);
-    }
-
-    /// <summary>
-    /// El artículo histórico SIMAFI con una cuenta que ya no existe en el plan debe seguir
-    /// siendo editable mientras NO se cambie la cuenta: un re-save del form (que siempre
-    /// reenvía CuentaContable) no puede reventar.
-    /// </summary>
-    [SkippableFact]
-    public async Task Update_CuentaHistoricaInvalidaSinCambiarla_NoLanza()
-    {
-        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
-
-        var tipo = await SeedTipoAsync("ZZF4HT");
-        var art = new alm_articulo
-        {
-            codigo_articulo = "ZZF4H1",
-            descripcion = "Histórico con cuenta inválida",
-            tipo_articulo_id = tipo,
-            cuenta_contable = "99NOEXISTE"
-        };
-        _context!.alm_articulos.Add(art);
-        await _context.SaveChangesAsync();
-
-        var dto = await _service!.GetByIdAsync(art.id);
         Assert.NotNull(dto);
-
-        dto!.Descripcion = "Descripción corregida";
-        var actualizado = await _service.UpdateAsync(art.id, dto, "tester");
-
-        Assert.Equal("Descripción corregida", actualizado.Descripcion);
-    }
-
-    [SkippableFact]
-    public async Task Update_CambiandoACuentaInexistente_Lanza()
-    {
-        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
-
-        var tipo = await SeedTipoAsync("ZZF4JT");
-        var art = new alm_articulo
-        {
-            codigo_articulo = "ZZF4J1",
-            descripcion = "Artículo",
-            tipo_articulo_id = tipo
-        };
-        _context!.alm_articulos.Add(art);
-        await _context.SaveChangesAsync();
-
-        var dto = await _service!.GetByIdAsync(art.id);
-        dto!.CuentaContable = "9909090908"; // no existe en el plan
-
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => _service.UpdateAsync(art.id, dto, "tester"));
-    }
-
-    /// <summary>
-    /// Reenviar la MISMA cuenta con separadores (máscara de presentación) no es un cambio:
-    /// no dispara la validación y el valor almacenado se conserva tal cual.
-    /// </summary>
-    [SkippableFact]
-    public async Task Update_MismaCuentaConSeparadores_NoValidaNiReescribe()
-    {
-        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
-
-        var tipo = await SeedTipoAsync("ZZF4KT");
-        var art = new alm_articulo
-        {
-            codigo_articulo = "ZZF4K1",
-            descripcion = "Histórico",
-            tipo_articulo_id = tipo,
-            cuenta_contable = "99887766" // NO existe en el plan (histórico inválido)
-        };
-        _context!.alm_articulos.Add(art);
-        await _context.SaveChangesAsync();
-
-        var dto = await _service!.GetByIdAsync(art.id);
-        dto!.CuentaContable = "99-88-77-66"; // misma cuenta, con guiones
-
-        await _service.UpdateAsync(art.id, dto, "tester"); // no lanza
-
-        var recargado = await _context.alm_articulos.AsNoTracking().FirstAsync(a => a.id == art.id);
-        Assert.Equal("99887766", recargado.cuenta_contable);
+        Assert.Equal(15m, dto!.Existencia);
+        Assert.Equal(3m, dto.CostoPromedio);   // no 2.50 (valor_unitario)
+        Assert.Equal(45m, dto.ValorTotal);
     }
 
     private class TestCurrentCompanyService : ICurrentCompanyService

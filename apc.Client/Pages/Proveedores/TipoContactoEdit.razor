@@ -1,6 +1,6 @@
 @page "/mantenimientos/tipos-contacto/nuevo"
 @page "/mantenimientos/tipos-contacto/{id:long}/editar"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Configuracion.Edit)]
 @inject ProveedoresClient ProveedoresClient
 @inject NavigationManager Navigation
 @inject ILogger<TipoContactoEdit> Logger

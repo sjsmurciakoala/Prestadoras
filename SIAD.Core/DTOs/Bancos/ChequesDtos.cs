@@ -9,6 +9,7 @@ public static class ChequeOrigen
     public const string Abono = "ABONO";
     public const string Transaccion = "TRANSACCION";
     public const string Manual = "MANUAL";
+    public const string CompraCxp = "COMPRA_CXP";
 }
 
 /// <summary>Accion de un evento en la bitacora ban_cheque_bitacora (append-only).</summary>

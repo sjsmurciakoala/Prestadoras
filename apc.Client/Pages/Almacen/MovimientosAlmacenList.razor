@@ -1,0 +1,244 @@
+@page "/almacen/movimientos"
+@attribute [Authorize(Policy = PermissionNames.Inventario.View)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.Constants
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject MovimientosAlmacenClient MovClient
+@inject TiposMovimientoClient TiposClient
+@inject BodegasClient BodegasClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Movimientos de almacén</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="MovToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Movimientos de almacén</h2>
+            <p class="page-subtitle">Entradas y salidas manuales: mermas, sobrantes de conteo, consumos internos</p>
+        </div>
+        <DxButton Text="Nuevo movimiento" IconCssClass="bi bi-plus-lg" RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern" Click="@(() => Navigation.NavigateTo("/almacen/movimientos/nuevo"))" />
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@movimientos" KeyFieldName="@nameof(MovimientoAlmacenListItemDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom" ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving" LayoutAutoLoading="OnLayoutAutoLoading">
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)" Placeholder="Buscar motivo, referencia o número..."
+                                   InputDelay="600" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                   CssClass="me-1" Style="min-width: 240px;" />
+                        <DxComboBox Data="@tipos" Value="@filtroTipoId" TData="TipoMovimientoAlmacenListItemDto" TValue="int?"
+                                    ValueChanged="@((int? v) => OnTipoChanged(v))"
+                                    ValueFieldName="@nameof(TipoMovimientoAlmacenListItemDto.Id)"
+                                    TextFieldName="@nameof(TipoMovimientoAlmacenListItemDto.Nombre)"
+                                    NullText="Todos los conceptos" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Style="min-width: 200px;" CssClass="me-1" />
+                        <DxComboBox Data="@bodegas" Value="@filtroBodegaId" TData="BodegaLookupDto" TValue="int?"
+                                    ValueChanged="@((int? v) => OnBodegaChanged(v))"
+                                    ValueFieldName="@nameof(BodegaLookupDto.Id)" TextFieldName="@nameof(BodegaLookupDto.Display)"
+                                    NullText="Todas las bodegas" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Style="min-width: 200px;" CssClass="me-1" />
+                        <div class="d-flex align-items-center me-2">
+                            <DxCheckBox Checked="@ocultarAnulados" CheckedChanged="@((bool v) => OnOcultarAnuladosChanged(v))"
+                                        CheckType="CheckType.Switch">Ocultar anulados</DxCheckBox>
+                        </div>
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" CssClass="me-1" />
+                        <div class="ms-auto text-muted small">Total: <span class="fw-bold">@movimientos.Count.ToString("N0")</span></div>
+                    </div>
+                </ToolbarTemplate>
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(MovimientoAlmacenListItemDto.Numero)" Caption="N.º" Width="90px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is MovimientoAlmacenListItemDto m)
+                            { <span class="text-dark fw-semibold">@m.Numero.ToString("00000")</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(MovimientoAlmacenListItemDto.Fecha)" Caption="Fecha" Width="120px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is MovimientoAlmacenListItemDto m)
+                            { @m.Fecha.ToString("dd/MM/yyyy") }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(MovimientoAlmacenListItemDto.TipoNombre)" Caption="Concepto" MinWidth="160">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is MovimientoAlmacenListItemDto m)
+                            {
+                                <span class="badge @ClaseBadgeClass(m.Clase)" title="@m.TipoCodigo">@m.TipoNombre</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(MovimientoAlmacenListItemDto.BodegaNombre)" Caption="Bodega" MinWidth="130" />
+                    <DxGridDataColumn FieldName="@nameof(MovimientoAlmacenListItemDto.Motivo)" Caption="Motivo" MinWidth="200" />
+                    <DxGridDataColumn FieldName="@nameof(MovimientoAlmacenListItemDto.Renglones)" Caption="Reng." Width="80px" TextAlignment="GridTextAlignment.Center" />
+                    <DxGridDataColumn FieldName="@nameof(MovimientoAlmacenListItemDto.Total)" Caption="Valor" Width="130px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is MovimientoAlmacenListItemDto m)
+                            { <span>L. @m.Total.ToString("N2")</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Estado" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is MovimientoAlmacenListItemDto m)
+                            {
+                                @if (m.Estado == EstadoMovimientoAlmacen.Anulado)
+                                { <span class="badge-status inactive">ANULADO</span> }
+                                else
+                                { <span class="badge-status active">REGISTRADO</span> }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Acciones" Width="120px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is MovimientoAlmacenListItemDto m)
+                            {
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-edit" title="Ver detalle"
+                                            @onclick="() => VerDetalle(m.Id)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                    <button type="button" class="btn-icon btn-delete" title="Anular"
+                                            disabled="@(m.Estado == EstadoMovimientoAlmacen.Anulado)"
+                                            @onclick="() => ConfirmarAnular(m)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-x-circle"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+                <EmptyDataAreaTemplate><div class="p-4 text-center text-muted">No hay movimientos para mostrar.</div></EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="anularVisible" Width="min(460px, 90vw)" HeaderText="Anular movimiento" ShowFooter="false">
+    <BodyTemplate>
+        <div class="p-3">
+            <div class="text-center mb-3 text-warning"><i class="bi bi-exclamation-triangle-fill" style="font-size: 2.5rem;"></i></div>
+            <p class="text-muted text-center">
+                Se posteará una reversa por cada renglón: la existencia y el costo vuelven al estado previo.
+                El documento queda como <strong>anulado</strong>, no se borra.
+            </p>
+            @if (paraAnular is not null)
+            {
+                <div class="fw-semibold text-center mb-3">Movimiento @paraAnular.Numero.ToString("00000") — @paraAnular.Motivo</div>
+            }
+            <label class="form-label small fw-semibold">Motivo de la anulación *</label>
+            <DxTextBox @bind-Text="motivoAnulacion" NullText="Explique por qué se anula" MaxLength="500" CssClass="mb-3" />
+            <div class="d-flex justify-content-center gap-3">
+                <DxButton Text="Cancelar" Click="@(() => { anularVisible = false; paraAnular = null; })"
+                          RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Sí, anular" Click="AnularConfirmadoAsync" RenderStyle="ButtonRenderStyle.Danger"
+                          IconCssClass="bi bi-x-circle" Enabled="@(!anulando)" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private const string GridLayoutStorageKey = "almacen-movimientos-grid-layout";
+
+    private DxGrid? grid;
+    private List<MovimientoAlmacenListItemDto> movimientos = new();
+    private List<TipoMovimientoAlmacenListItemDto> tipos = new();
+    private List<BodegaLookupDto> bodegas = new();
+
+    private string filtroBusqueda = string.Empty;
+    private int? filtroTipoId;
+    private int? filtroBodegaId;
+    private bool ocultarAnulados = true;
+    private bool isLoading;
+    private string? errorMessage;
+
+    private bool anularVisible, anulando;
+    private string motivoAnulacion = string.Empty;
+    private MovimientoAlmacenListItemDto? paraAnular;
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e) => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e) => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { tipos = await TiposClient.GetAsync(soloActivos: false); } catch { tipos = new(); }
+        try { bodegas = await BodegasClient.GetLookupAsync(); } catch { bodegas = new(); }
+        await CargarAsync();
+    }
+
+    private MovimientoAlmacenFilterDto BuildFilter() => new()
+    {
+        Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
+        TipoMovimientoId = filtroTipoId,
+        BodegaId = filtroBodegaId,
+        Estado = ocultarAnulados ? EstadoMovimientoAlmacen.Registrado : null
+    };
+
+    private async Task CargarAsync()
+    {
+        try { isLoading = true; errorMessage = null; movimientos = await MovClient.GetAsync(BuildFilter()); }
+        catch (Exception ex) { errorMessage = $"No se pudieron cargar los movimientos: {ex.Message}"; }
+        finally { isLoading = false; }
+    }
+
+    private async Task OnBusquedaChanged(string v) { filtroBusqueda = v; await CargarAsync(); }
+    private async Task OnTipoChanged(int? v) { filtroTipoId = v; await CargarAsync(); }
+    private async Task OnBodegaChanged(int? v) { filtroBodegaId = v; await CargarAsync(); }
+    private async Task OnOcultarAnuladosChanged(bool v) { ocultarAnulados = v; await CargarAsync(); }
+
+    private void VerDetalle(int id) => Navigation.NavigateTo($"/almacen/movimientos/{id}");
+
+    private void ConfirmarAnular(MovimientoAlmacenListItemDto m) { paraAnular = m; motivoAnulacion = string.Empty; anularVisible = true; }
+
+    private async Task AnularConfirmadoAsync()
+    {
+        if (paraAnular is null) { anularVisible = false; return; }
+        if (string.IsNullOrWhiteSpace(motivoAnulacion))
+        {
+            Toast("Error", "Debe indicar el motivo de la anulación.", ToastRenderStyle.Warning);
+            return;
+        }
+        anulando = true;
+        try
+        {
+            var ok = await MovClient.AnularAsync(paraAnular.Id, motivoAnulacion.Trim());
+            if (!ok) Toast("Error", "El movimiento ya no existe.", ToastRenderStyle.Danger);
+            else { Toast("Éxito", "Movimiento anulado.", ToastRenderStyle.Success); await CargarAsync(); }
+            anularVisible = false; paraAnular = null;
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { anulando = false; }
+    }
+
+    private static string ClaseBadgeClass(string clase) => clase switch
+    {
+        ClaseAjusteInventario.Entrada => "bg-success-subtle text-success-emphasis border border-success-subtle",
+        ClaseAjusteInventario.Salida => "bg-danger-subtle text-danger-emphasis border border-danger-subtle",
+        ClaseAjusteInventario.Valor => "bg-info-subtle text-info-emphasis border border-info-subtle",
+        _ => "bg-light text-dark border"
+    };
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = "MovToast" });
+}

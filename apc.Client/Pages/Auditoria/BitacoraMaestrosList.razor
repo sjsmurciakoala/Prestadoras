@@ -1,5 +1,5 @@
 @page "/auditoria/bitacora-maestros"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Configuracion.View)]
 
 @using System.Text.Json
 @using DevExpress.Blazor
@@ -13,7 +13,7 @@
 <PageTitle>SIAD - Bitácora de maestros</PageTitle>
 
 <div class="page-container">
-    <DxToastProvider Name="BitacoraMaestrosToast" MaxToastCount="4" />
+    <DxToastProvider Name="BitacoraMaestrosToast" MaxToastCount="4" StickToViewport="true" />
 
     <div class="header-section mb-3">
         <div>

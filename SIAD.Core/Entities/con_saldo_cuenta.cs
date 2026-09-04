@@ -3,7 +3,7 @@ using SIAD.Core.Tenancy;
 namespace SIAD.Core.Entities;
 
 /// <summary>
-/// Saldos de cuentas contables por período, mes y tipo de transacción
+/// Saldos de cuentas contables por perÃ­odo, mes y tipo de transacciÃ³n
 /// Equivalente a C01AcctBalance en sistema de referencia
 /// </summary>
 public class con_saldo_cuenta : ICompanyScopedEntity

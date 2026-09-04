@@ -142,10 +142,10 @@ public sealed class ClientesClient
     /// Obtiene los datos completos de un cliente por su ID.
     /// </summary>
     public async Task<ClienteDetailDto?> ObtenerPorIdAsync(int id, CancellationToken ct = default)
-        => await http.GetFromJsonAsync<ClienteDetailDto?>($"api/clientes/{id}", ct);
+        => await http.GetOrDefaultFromJsonAsyncWithAuthCheck<ClienteDetailDto>($"api/clientes/{id}", ct);
 
     public async Task<ClienteFotoMedidorHeaderDto?> ObtenerFotoMedidorHeaderAsync(int clienteId, CancellationToken ct = default)
-        => await http.GetFromJsonAsync<ClienteFotoMedidorHeaderDto?>($"api/clientes/{clienteId}/foto-medidor/header", ct);
+        => await http.GetOrDefaultFromJsonAsyncWithAuthCheck<ClienteFotoMedidorHeaderDto>($"api/clientes/{clienteId}/foto-medidor/header", ct);
 
     public async Task<ClienteFotoMedidorItemDto[]> ObtenerFotoMedidorAsync(
         int clienteId,
@@ -165,7 +165,7 @@ public sealed class ClientesClient
     /// Obtiene el estado de cuenta (resumen financiero) de un cliente.
     /// </summary>
     public async Task<ClienteEstadoCuentaDto?> ObtenerEstadoCuentaAsync(int clienteId, CancellationToken ct = default)
-        => await http.GetFromJsonAsync<ClienteEstadoCuentaDto?>($"api/clientes/{clienteId}/estado-cuenta", ct);
+        => await http.GetOrDefaultFromJsonAsyncWithAuthCheck<ClienteEstadoCuentaDto>($"api/clientes/{clienteId}/estado-cuenta", ct);
 
     /// <summary>
     /// Obtiene todos los movimientos (transacciones) de un cliente.
@@ -212,7 +212,7 @@ public sealed class ClientesClient
         CancellationToken ct = default)
     {
         var query = $"?desde={desde:yyyy-MM-dd}&hasta={hasta:yyyy-MM-dd}";
-        return await http.GetFromJsonAsync<ClienteHistoricoConsumoResponseDto?>($"api/clientes/{clienteId}/historico-consumo{query}", ct);
+        return await http.GetOrDefaultFromJsonAsyncWithAuthCheck<ClienteHistoricoConsumoResponseDto>($"api/clientes/{clienteId}/historico-consumo{query}", ct);
     }
 
     /// <summary>
@@ -250,7 +250,7 @@ public sealed class ClientesClient
         }
 
         var url = $"api/clientes/{clienteId}/historico-consumo/paged?{string.Join("&", parameters)}";
-        return await http.GetFromJsonAsync<ClienteHistoricoConsumoPagedResponseDto?>(url, ct);
+        return await http.GetOrDefaultFromJsonAsyncWithAuthCheck<ClienteHistoricoConsumoPagedResponseDto>(url, ct);
     }
 
     public async Task<ClienteDetailDto?> ActualizarAsync(int id, ClienteUpdateDto dto, CancellationToken ct = default)

@@ -1,5 +1,5 @@
 @page "/presupuesto/configuraciones/{IdPresupuesto}/detalles/{CuentaContable}/gestion"
-@attribute [Authorize(Policy = AuthorizationPolicies.Contabilidad)]
+@attribute [Authorize(Policy = PermissionNames.Contabilidad.View)]
 
 @using DevExpress.Blazor
 @using System.ComponentModel.DataAnnotations

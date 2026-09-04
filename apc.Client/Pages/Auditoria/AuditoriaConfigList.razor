@@ -1,5 +1,5 @@
 @page "/auditoria/configuracion"
-@attribute [Authorize(Policy = "CanSuperAdmin")]
+@attribute [Authorize(Policy = SIAD.Core.Constants.AuthorizationPolicies.SuperAdmin)]
 
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Auditoria
@@ -11,7 +11,7 @@
 <PageTitle>SIAD - Configuración de auditoría</PageTitle>
 
 <div class="page-container">
-    <DxToastProvider Name="AuditoriaConfigToast" MaxToastCount="4" />
+    <DxToastProvider Name="AuditoriaConfigToast" MaxToastCount="4" StickToViewport="true" />
 
     <div class="header-section">
         <div>

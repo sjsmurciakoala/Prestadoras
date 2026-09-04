@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SIAD.Core.Constants;
+using apc.Security;
 using SIAD.Core.DTOs.Presupuesto;
 using SIAD.Reports;
 using SIAD.Services.Presupuesto;
@@ -9,7 +10,7 @@ namespace apc.Controllers.Presupuesto;
 
 [ApiController]
 [Route("api/presupuesto/configuraciones")]
-[Authorize(Policy = AuthorizationPolicies.Contabilidad)]
+[ModuleAuthorize(PermissionModules.Contabilidad)]
 public sealed class ConfiguracionPresupuestoController : ControllerBase
 {
     private readonly IConfiguracionPresupuestoService _service;
@@ -413,7 +414,7 @@ public sealed class ConfiguracionPresupuestoController : ControllerBase
     }
 
     [HttpPost("{idPresupuesto}/aprobar")]
-    [Authorize(Policy = AuthorizationPolicies.PresupuestoAprobacion)]
+    [Authorize(Policy = PermissionNames.Contabilidad.Presupuesto.Aprobar)]
     public async Task<IActionResult> ApprovePresupuesto(string idPresupuesto, CancellationToken ct)
     {
         try

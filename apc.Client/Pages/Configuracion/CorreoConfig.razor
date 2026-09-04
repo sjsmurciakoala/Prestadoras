@@ -1,0 +1,366 @@
+@page "/configuracion/correo"
+@attribute [Authorize(Policy = AuthorizationPolicies.SuperAdmin)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Configuracion
+@using apc.Client.Services
+@using apc.Client.Services.Configuracion
+
+@inject CorreoConfigClient Client
+@inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Correo y notificaciones</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="CorreoToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Correo y notificaciones</h2>
+            <p class="page-subtitle">Una conexión a SendGrid por empresa y las áreas que reciben notificaciones</p>
+        </div>
+    </div>
+
+    @* ─────────────────────────────── Zona 1: conexión ─────────────────────────────── *@
+    <div class="modern-card position-relative mb-3" style="max-width: 900px;">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+        <div class="p-3">
+            <h5 class="mb-3"><i class="bi bi-plug me-2"></i>Conexión</h5>
+
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Proveedor</label>
+                    <div class="form-control-plaintext"><span class="badge bg-secondary-subtle text-secondary-emphasis border">SendGrid</span></div>
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label">
+                        API key
+                        @if (conexion.TieneApiKey)
+                        {
+                            <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle ms-2"><i class="bi bi-shield-check me-1"></i>Configurada</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-light text-dark border ms-2"><i class="bi bi-shield-exclamation me-1"></i>No configurada</span>
+                        }
+                    </label>
+                    <DxTextBox @bind-Text="nuevaApiKey" Password="true"
+                               NullText="Dejar en blanco para conservar la actual" />
+                    <div class="form-text"><i class="bi bi-lock me-1"></i>Se guarda cifrada y nunca se muestra la clave almacenada. Deja el campo vacío para no cambiarla.</div>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Remitente por defecto (correo)</label>
+                    <DxTextBox @bind-Text="conexion.RemitenteEmailDefault" NullText="no-reply@empresa.hn" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Nombre del remitente</label>
+                    <DxTextBox @bind-Text="conexion.RemitenteNombreDefault" NullText="Nombre visible" />
+                </div>
+
+                <div class="col-12">
+                    <DxCheckBox @bind-Checked="conexion.Activo" CheckType="CheckType.Switch">
+                        Envío de correo activado <span class="text-muted">(interruptor global; apagado, no sale ningún correo)</span>
+                    </DxCheckBox>
+                </div>
+            </div>
+
+            <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mt-3">
+                <div style="min-width:280px; max-width:400px;">
+                    <label class="form-label small text-muted mb-1">Probar conexión — enviar un correo de prueba a:</label>
+                    <div class="d-flex gap-2">
+                        <DxTextBox @bind-Text="correoPrueba" NullText="tucorreo@empresa.hn" CssClass="flex-grow-1" />
+                        <DxButton Text="Probar" IconCssClass="bi bi-send" RenderStyle="ButtonRenderStyle.Secondary"
+                                  Click="ProbarConexionAsync"
+                                  Enabled="@(!isSaving && !isLoading && !isProbando && conexion.TieneApiKey)" />
+                    </div>
+                    <div class="form-text">Usa la conexión ya <strong>guardada</strong> (aunque el envío global esté apagado). Guarda primero si cambiaste la API key.</div>
+                </div>
+                <DxButton Text="Guardar conexión" IconCssClass="bi bi-check-lg" RenderStyle="ButtonRenderStyle.Primary"
+                          Click="GuardarConexionAsync" Enabled="@(!isSaving && !isLoading)" />
+            </div>
+        </div>
+    </div>
+
+    @* ─────────────────────────── Zona 2: áreas de notificación ─────────────────────────── *@
+    <div class="modern-card position-relative">
+        <div class="p-3">
+            <h5 class="mb-1"><i class="bi bi-bell me-2"></i>Áreas de notificación</h5>
+            <p class="text-muted small mb-3">Cada área usa la misma conexión, con su propio remitente (opcional) y sus destinatarios. Los tipos los define el sistema.</p>
+
+            <div class="grid-wrapper">
+                <DxGrid Data="@areas" ShowFilterRow="false" PagerVisible="false"
+                        ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                        HighlightRowOnHover="true" CssClass="grid-solicitudes">
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(NotificacionCorreoDto.Tipo)" Caption="Área" Width="180px">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is NotificacionCorreoDto a)
+                                {
+                                    <span class="fw-semibold">@TipoLabel(a.Tipo)</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn Caption="Estado" Width="130px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is NotificacionCorreoDto a)
+                                {
+                                    @if (a.Id == 0)
+                                    {
+                                        <span class="badge bg-light text-dark border">Sin configurar</span>
+                                    }
+                                    else if (a.Activo)
+                                    {
+                                        <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">Activa</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary-subtle text-secondary-emphasis border">Inactiva</span>
+                                    }
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn Caption="Remitente" MinWidth="200">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is NotificacionCorreoDto a)
+                                {
+                                    @if (string.IsNullOrWhiteSpace(a.RemitenteEmail))
+                                    {
+                                        <span class="text-muted fst-italic">(por defecto)</span>
+                                    }
+                                    else
+                                    {
+                                        <span>@a.RemitenteEmail</span>
+                                    }
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn Caption="Destinatarios" MinWidth="160">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is NotificacionCorreoDto a)
+                                {
+                                    <span class="text-muted">@ResumenDestinatarios(a)</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn Caption="" Width="110px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is NotificacionCorreoDto a)
+                                {
+                                    <DxButton Text="Editar" IconCssClass="bi bi-pencil" RenderStyle="ButtonRenderStyle.Secondary"
+                                              RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                                              Click="@(() => Editar(a))" />
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                </DxGrid>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* ─────────────────────────────── popup de edición de área ─────────────────────────────── *@
+<DxPopup @bind-Visible="editVisible" HeaderText="@($"Área: {TipoLabel(editModel.Tipo)}")"
+         Width="580px" ShowFooter="true" CloseOnEscape="true">
+    <BodyContentTemplate>
+        <div class="row g-3">
+            <div class="col-12">
+                <label class="form-label">Nombre (opcional)</label>
+                <DxTextBox @bind-Text="editModel.Nombre" NullText="@TipoLabel(editModel.Tipo)" />
+            </div>
+            <div class="col-md-7">
+                <label class="form-label">Remitente (correo)</label>
+                <DxTextBox @bind-Text="editModel.RemitenteEmail" NullText="Vacío = usa el remitente por defecto" />
+            </div>
+            <div class="col-md-5">
+                <label class="form-label">Remitente (nombre)</label>
+                <DxTextBox @bind-Text="editModel.RemitenteNombre" NullText="Opcional" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Para (uno por línea)</label>
+                <DxMemo @bind-Text="editParaText" Rows="4" NullText="destino@empresa.hn" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Con copia / CC (uno por línea)</label>
+                <DxMemo @bind-Text="editCcText" Rows="4" NullText="copia@empresa.hn" />
+            </div>
+            <div class="col-12">
+                <DxCheckBox @bind-Checked="editModel.Activo" CheckType="CheckType.Switch">Área activa</DxCheckBox>
+            </div>
+        </div>
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" Click="@(() => editVisible = false)" />
+        <DxButton Text="Guardar" IconCssClass="bi bi-check-lg" RenderStyle="ButtonRenderStyle.Primary"
+                  Click="GuardarAreaAsync" Enabled="@(!isSaving)" />
+    </FooterContentTemplate>
+</DxPopup>
+
+@code {
+    private ConexionCorreoDto conexion = new();
+    private string nuevaApiKey = string.Empty;
+    private string correoPrueba = string.Empty;
+    private List<NotificacionCorreoDto> areas = new();
+
+    private bool isLoading = true;
+    private bool isSaving;
+    private bool isProbando;
+
+    // edición de área
+    private bool editVisible;
+    private NotificacionCorreoDto editModel = new() { Tipo = TipoNotificacion.Administracion };
+    private string editParaText = string.Empty;
+    private string editCcText = string.Empty;
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        isLoading = true;
+        try
+        {
+            conexion = await Client.ObtenerConexionAsync();
+            if (string.IsNullOrEmpty(correoPrueba))
+                correoPrueba = conexion.RemitenteEmailDefault ?? string.Empty;
+            var api = await Client.ListarNotificacionesAsync();
+            // Se muestran TODOS los tipos del catálogo; los no configurados salen como "Sin configurar".
+            areas = TipoNotificacion.Todos
+                .Select(t => api.FirstOrDefault(a => a.Tipo == t) ?? new NotificacionCorreoDto { Tipo = t, Activo = false })
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", $"No se pudo cargar la configuración: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task GuardarConexionAsync()
+    {
+        isSaving = true;
+        try
+        {
+            conexion = await Client.GuardarConexionAsync(new ConexionCorreoUpsertDto
+            {
+                Proveedor = ProveedorCorreo.SendGrid,
+                RemitenteEmailDefault = conexion.RemitenteEmailDefault,
+                RemitenteNombreDefault = conexion.RemitenteNombreDefault,
+                Activo = conexion.Activo,
+                NuevaApiKey = string.IsNullOrWhiteSpace(nuevaApiKey) ? null : nuevaApiKey.Trim()
+            });
+            nuevaApiKey = string.Empty;
+            Toast("Éxito", "Conexión guardada.", ToastRenderStyle.Success);
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task ProbarConexionAsync()
+    {
+        isProbando = true;
+        try
+        {
+            var r = await Client.ProbarConexionAsync(correoPrueba);
+            if (r.Exito)
+                Toast("Prueba enviada", $"SendGrid aceptó el correo (HTTP {r.StatusCode}). Revisa la bandeja de {correoPrueba}.", ToastRenderStyle.Success);
+            else if (r.Omitido)
+                Toast("No se envió", r.Error ?? "Falta configuración.", ToastRenderStyle.Warning);
+            else
+                Toast("Falló el envío", $"{(r.StatusCode is int s ? $"HTTP {s}: " : "")}{r.Error}", ToastRenderStyle.Danger);
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isProbando = false;
+        }
+    }
+
+    private void Editar(NotificacionCorreoDto a)
+    {
+        editModel = new NotificacionCorreoDto
+        {
+            Id = a.Id,
+            Tipo = a.Tipo,
+            Nombre = a.Nombre,
+            RemitenteEmail = a.RemitenteEmail,
+            RemitenteNombre = a.RemitenteNombre,
+            Activo = a.Id == 0 ? true : a.Activo
+        };
+        editParaText = string.Join("\n", a.Destinatarios.Where(d => d.Clase == ClaseDestinatario.To).Select(d => d.Correo));
+        editCcText = string.Join("\n", a.Destinatarios.Where(d => d.Clase == ClaseDestinatario.Cc).Select(d => d.Correo));
+        editVisible = true;
+    }
+
+    private async Task GuardarAreaAsync()
+    {
+        isSaving = true;
+        try
+        {
+            editModel.Destinatarios = ParseCorreos(editParaText, ClaseDestinatario.To)
+                .Concat(ParseCorreos(editCcText, ClaseDestinatario.Cc))
+                .ToList();
+
+            await Client.GuardarNotificacionAsync(editModel);
+            editVisible = false;
+            Toast("Éxito", $"Área «{TipoLabel(editModel.Tipo)}» guardada.", ToastRenderStyle.Success);
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private static List<DestinatarioCorreoDto> ParseCorreos(string? texto, string clase) =>
+        (texto ?? string.Empty)
+            .Split(['\n', '\r', ';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(c => new DestinatarioCorreoDto { Correo = c, Clase = clase, Activo = true })
+            .ToList();
+
+    private static string TipoLabel(string tipo) => tipo switch
+    {
+        TipoNotificacion.Administracion => "Administración",
+        TipoNotificacion.Almacen => "Almacén",
+        TipoNotificacion.Cobranza => "Cobranza",
+        TipoNotificacion.Sistema => "Sistema",
+        _ => tipo
+    };
+
+    private static string ResumenDestinatarios(NotificacionCorreoDto a)
+    {
+        var to = a.Destinatarios.Count(d => d.Clase == ClaseDestinatario.To);
+        var cc = a.Destinatarios.Count(d => d.Clase == ClaseDestinatario.Cc);
+        if (to == 0 && cc == 0) return "—";
+        var partes = new List<string>();
+        if (to > 0) partes.Add($"{to} para");
+        if (cc > 0) partes.Add($"{cc} CC");
+        return string.Join(" · ", partes);
+    }
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = text,
+            RenderStyle = style,
+            ProviderName = "CorreoToast"
+        });
+}

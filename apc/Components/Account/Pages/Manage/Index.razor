@@ -7,7 +7,7 @@
 @inject SignInManager<ApplicationUser> SignInManager
 @inject IdentityUserAccessor UserAccessor
 @inject IdentityRedirectManager RedirectManager
-<PageTitle>Profile</PageTitle>
+<PageTitle>Perfil</PageTitle>
 
 <div class="block-content">
     <StatusMessage Message="@message" />
@@ -15,14 +15,14 @@
         <DataAnnotationsValidator />
         <ValidationSummary class="text-danger" role="alert" />
         <DxFormLayout CaptionPosition=@CaptionPosition.Vertical>
-            <DxFormLayoutItem Caption="Username" ColSpanMd="12" BeginRow="true">
+            <DxFormLayoutItem Caption="Usuario" ColSpanMd="12" BeginRow="true">
                 <InteractiveServerTextBox Name="username" Value="@username" Enabled="false" />
             </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Phone number" ColSpanMd="12" BeginRow="true">
+            <DxFormLayoutItem Caption="Teléfono" ColSpanMd="12" BeginRow="true">
                 <InteractiveServerMaskedInput Name="Input.PhoneNumber" Value="@Input.PhoneNumber" Mask="(999)000-0000"></InteractiveServerMaskedInput>
             </DxFormLayoutItem>
             <DxFormLayoutItem ColSpanMd="12" BeginRow="true">
-                <DxButton CssClass="w-100" SubmitFormOnClick="true" Text="Save"></DxButton>
+                <DxButton CssClass="w-100" SubmitFormOnClick="true" Text="Guardar"></DxButton>
             </DxFormLayoutItem>
         </DxFormLayout>
     </EditForm>
@@ -61,7 +61,7 @@
 
     private sealed class InputModel {
         [Phone]
-        [Display(Name = "Phone number")]
+        [Display(Name = "Teléfono")]
         public string? PhoneNumber { get; set; }
     }
 }

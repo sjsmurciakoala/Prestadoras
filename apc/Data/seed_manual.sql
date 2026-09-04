@@ -191,6 +191,18 @@ CROSS JOIN (VALUES
   ('module.inventario.create'),
   ('module.inventario.edit'),
   ('module.inventario.delete'),
+  -- Carga inicial de existencias y ajustes de inventario (2026-07-30). Son permisos de
+  -- OPCIÓN: cada endpoint del catálogo genera además el suyo largo, que DatabaseInitializer
+  -- siembra solo desde PermissionNames.All al arrancar. Este archivo se mantiene a mano,
+  -- así que solo lleva los cortos.
+  ('module.inventario.carga_inicial.view'),
+  ('module.inventario.carga_inicial.create'),
+  ('module.inventario.carga_inicial.edit'),
+  ('module.inventario.carga_inicial.delete'),
+  ('module.inventario.ajustes.view'),
+  ('module.inventario.ajustes.create'),
+  ('module.inventario.ajustes.edit'),
+  ('module.inventario.ajustes.delete'),
   ('module.contabilidad.view'),
   ('module.contabilidad.create'),
   ('module.contabilidad.edit'),

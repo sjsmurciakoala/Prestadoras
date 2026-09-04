@@ -95,9 +95,29 @@ public partial class alm_requisicion : ICompanyScopedEntity
     /// </summary>
     public string origen { get; set; } = OrigenDocumento.Siad;
 
+    /// <summary>
+    /// Cabecera del documento nuevo (Fase 6). NULL en las líneas del histórico SIMAFI, que no
+    /// tienen cabecera y no se migran.
+    /// </summary>
+    public int? requisicion_hdr_id { get; set; }
+
+    /// <summary>
+    /// Cantidad ya entregada por descargos vigentes (eje de la parcialidad; equivale a
+    /// <c>CANTIDAD_APLICADA</c> del legacy). La escribe el servicio de despacho bajo
+    /// <c>SELECT … FOR UPDATE</c>; el CHECK <c>ck_alm_requisicion_despachada</c> (0 ≤ x ≤ cantidad)
+    /// es la red final.
+    /// </summary>
+    public decimal cantidad_despachada { get; set; }
+
+    /// <summary>Solo reabastecimiento: renglón ya volcado a una orden de compra (fuera de alcance 1ª entrega).</summary>
+    public bool aplicado_en_oc { get; set; }
+
     /// <summary>Artículo de la requisición (FK a alm_articulo). El código legacy se conserva como referencia.</summary>
     public virtual alm_articulo? articulo_ref { get; set; }
 
     /// <summary>Bodega de salida de la requisición (FK a alm_bodega).</summary>
     public virtual alm_bodega? bodega_ref { get; set; }
+
+    /// <summary>Cabecera del documento nuevo (Fase 6). NULL en el histórico.</summary>
+    public virtual alm_requisicion_hdr? cabecera { get; set; }
 }

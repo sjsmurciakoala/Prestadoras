@@ -1,0 +1,733 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using Xunit;
+using SIAD.Core.Constants;
+using SIAD.Core.DTOs.Almacen;
+using SIAD.Core.Entities;
+using SIAD.Core.Tenancy;
+using SIAD.Services.Aprobaciones;
+using SIAD.Services.Almacen;
+using SIAD.Services.Presupuesto;
+using SIAD.Data;
+using SIAD.Tests.Infrastructure;
+
+namespace SIAD.Tests.Almacen;
+
+/// <summary>
+/// Órdenes de compra (alm_orden_compra): correlativo por empresa, cálculo de totales,
+/// la regla dura del código de proveedor y la máquina de estados.
+/// <para>
+/// Los datos de apoyo (proveedor y artículos) se eligen de la base y la relación
+/// artículo↔proveedor se siembra DENTRO de la transacción del test, que hace ROLLBACK:
+/// nada queda escrito.
+/// </para>
+/// </summary>
+[Collection("Postgres")]
+public class OrdenCompraTests : IntegrationTestBase, IAsyncLifetime
+{
+    private SiadDbContext? _context;
+    private OrdenCompraService? _service;
+
+    private string _codProveedor = string.Empty;
+    private int _articuloA;
+    private int _articuloB;
+
+    private const string UpcA = "TEST-UPC-A";
+    private const string UpcB = "TEST-UPC-B";
+
+    public OrdenCompraTests(PostgresFixture fixture) : base(fixture)
+    {
+    }
+
+    public new async Task InitializeAsync()
+    {
+        await base.InitializeAsync();
+
+        if (!Fixture.Available)
+        {
+            return;
+        }
+
+        // Esta clase prueba la MECÁNICA de la orden (correlativo, totales, máquina de estados),
+        // no el presupuesto. Sin este aislamiento, aprobar falla con «excede el presupuesto
+        // disponible» en cuanto alguien deja cfg_presupuesto_control encendido en la base de
+        // prueba —que es justo el estado del mirror hoy (COMPRAS_OC en modo 2)—. El compromiso
+        // tiene su propia cobertura en Presupuesto/CompromisoOrdenCompraTests, que enciende el
+        // control por su cuenta. Mismo criterio que CompraCxpTests y RecepcionCompraTests.
+        await DesactivarControlPresupuestarioAsync();
+
+        var options = new DbContextOptionsBuilder<SiadDbContext>()
+            .UseNpgsql(Connection)
+            .Options;
+
+        _context = new SiadDbContext(options, new TestCurrentCompanyService(CompanyId));
+        _context.Database.UseTransaction(Transaction);
+        var empresa = new TestCurrentCompanyService(CompanyId);
+        _service = new OrdenCompraService(
+            _context, empresa, new TasaIsvArticuloResolver(_context),
+            new PresupuestoCompromisoService(_context, empresa),
+            new AprobacionService(_context, empresa, new TestCurrentUserService()),
+            new AprobacionNotificadorNoop());
+
+        // Proveedor activo cualquiera de la empresa de pruebas.
+        _codProveedor = await _context.prv_proveedores.AsNoTracking()
+            .Where(p => p.company_id == CompanyId && (p.status == null || p.status == true))
+            .OrderBy(p => p.cod_proveedor)
+            .Select(p => p.cod_proveedor)
+            .FirstAsync();
+
+        // Dos artículos activos.
+        var articulos = await _context.alm_articulos.AsNoTracking()
+            .Where(a => a.activo)
+            .OrderBy(a => a.id)
+            .Select(a => a.id)
+            .Take(2)
+            .ToListAsync();
+
+        _articuloA = articulos[0];
+        _articuloB = articulos[1];
+
+        // Estado de partida conocido: A con código, B sin relación alguna.
+        await SembrarRelacionAsync(_articuloA, UpcA);
+        await BorrarRelacionAsync(_articuloB);
+    }
+
+    public new Task DisposeAsync()
+    {
+        _context?.Dispose();
+        return base.DisposeAsync();
+    }
+
+    // ── Correlativo y totales ────────────────────────────────────────────────
+
+    [SkippableFact]
+    public async Task Crear_AsignaCorrelativoYCalculaTotales()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        // El ISV se autocalcula desde la tasa del tipo: 15% sobre el total del renglón.
+        await SembrarIsvDelArticuloAsync(_articuloA, 15m);
+
+        var creada = await _service!.CrearAsync(NuevaOrden(descuento: 10m), "tester");
+
+        Assert.True(creada.Numero > 0);
+        Assert.Equal(EstadoOrdenCompra.Borrador, creada.Estado);
+        Assert.Single(creada.Detalles);
+
+        // 10 × 25.50 = 255.00 · descuento 10% = 25.50 · base imponible 229.50
+        // El ISV va sobre la base YA DESCONTADA: 229.50 × 15% = 34.43 (no 38.25).
+        Assert.Equal(255.00m, creada.SubTotal);
+        Assert.Equal(34.43m, creada.Impuesto);
+        Assert.Equal(34.43m, creada.Detalles.Single().Impuesto);
+        Assert.Equal(15m, creada.Detalles.Single().TasaIsv);
+        Assert.True(creada.Detalles.Single().IsvConfigurado);
+        Assert.Equal(263.93m, creada.Total);   // 255 − 25.50 + 34.43
+    }
+
+    /// <summary>
+    /// El ISV se calcula sobre la base NETA de descuento, no sobre el bruto. Cobrar impuesto
+    /// sobre mercadería descontada infla el total del documento, el compromiso presupuestario
+    /// y la cuenta por pagar; en Honduras el ISV grava el valor neto tras descuentos.
+    /// </summary>
+    [SkippableTheory]
+    [InlineData(0, 255.00, 38.25, 293.25)]    // sin descuento: el bruto ES la base
+    [InlineData(10, 229.50, 34.43, 263.93)]   // 229.50 × 15% = 34.425 → 34.43
+    [InlineData(50, 127.50, 19.13, 146.63)]   // 127.50 × 15% = 19.125 → 19.13
+    [InlineData(100, 0.00, 0.00, 0.00)]       // todo descontado: no hay nada que gravar
+    public async Task Crear_ElIsvSeCalculaSobreLaBaseDescontada(
+        double descuento, double baseEsperada, double isvEsperado, double totalEsperado)
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        await SembrarIsvDelArticuloAsync(_articuloA, 15m);
+
+        var creada = await _service!.CrearAsync(NuevaOrden(descuento: (decimal)descuento), "tester");
+
+        // El subtotal siempre es el bruto: el descuento se ve en el total, no en la base.
+        Assert.Equal(255.00m, creada.SubTotal);
+        Assert.Equal((decimal)isvEsperado, creada.Impuesto);
+        Assert.Equal((decimal)isvEsperado, creada.Detalles.Single().Impuesto);
+        Assert.Equal((decimal)totalEsperado, creada.Total);
+
+        // La base imponible que justifica ese ISV.
+        var montoDescuento = Math.Round(255.00m * (decimal)descuento / 100m, 2, MidpointRounding.AwayFromZero);
+        Assert.Equal((decimal)baseEsperada, creada.SubTotal - montoDescuento);
+    }
+
+    [SkippableFact]
+    public async Task Crear_DosOrdenes_ElCorrelativoAvanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var primera = await _service!.CrearAsync(NuevaOrden(), "tester");
+        var segunda = await _service.CrearAsync(NuevaOrden(), "tester");
+
+        Assert.Equal(primera.Numero + 1, segunda.Numero);
+    }
+
+    [SkippableFact]
+    public async Task Crear_SinCalculaIsv_NoRegistraIsvAunConTasa()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        // Aunque el tipo tenga tasa, con CalculaIsv=false el ISV queda en 0.
+        await SembrarIsvDelArticuloAsync(_articuloA, 15m);
+
+        var dto = NuevaOrden();
+        dto.CalculaIsv = false;
+
+        var creada = await _service!.CrearAsync(dto, "tester");
+
+        Assert.Equal(0m, creada.Impuesto);
+        Assert.Equal(0m, creada.Detalles.Single().Impuesto);
+        Assert.Equal(255.00m, creada.Total);
+    }
+
+    [SkippableFact]
+    public async Task Crear_TipoSinTasa_NoRegistraIsvYRenglonNoConfigurado()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        // El tipo del artículo sin tasa asignada: el renglón va sin ISV y marcado "no configurado".
+        await QuitarIsvDelArticuloAsync(_articuloA);
+
+        var creada = await _service!.CrearAsync(NuevaOrden(), "tester");
+
+        Assert.Equal(0m, creada.Impuesto);
+        Assert.Equal(0m, creada.Detalles.Single().Impuesto);
+        Assert.False(creada.Detalles.Single().IsvConfigurado);
+        Assert.Equal(255.00m, creada.Total);
+    }
+
+    [SkippableFact]
+    public async Task BuscarArticulosProveedor_TraeTasaYFlagIsv()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        await SembrarIsvDelArticuloAsync(_articuloA, 15m);
+
+        var conTasa = await _service!.BuscarArticulosProveedorAsync(_codProveedor, null);
+        var itemA = Assert.Single(conTasa, x => x.ArticuloId == _articuloA);
+        Assert.True(itemA.TieneIsvConfigurado);
+        Assert.Equal(15m, itemA.TasaIsv);
+
+        // Sin tasa: aparece igual (tiene código), pero marcado como no configurado y tasa 0.
+        await QuitarIsvDelArticuloAsync(_articuloA);
+        var sinTasa = await _service.BuscarArticulosProveedorAsync(_codProveedor, null);
+        var itemSin = Assert.Single(sinTasa, x => x.ArticuloId == _articuloA);
+        Assert.False(itemSin.TieneIsvConfigurado);
+        Assert.Equal(0m, itemSin.TasaIsv);
+    }
+
+    // ── Regla dura del código de proveedor ───────────────────────────────────
+
+    [SkippableFact]
+    public async Task Crear_ArticuloSinRelacionConElProveedor_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var dto = NuevaOrden();
+        dto.Detalles.Single().ArticuloId = _articuloB;   // sin relación sembrada
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service!.CrearAsync(dto, "tester"));
+        Assert.Contains("sin código para el proveedor", ex.Message);
+    }
+
+    [SkippableFact]
+    public async Task Crear_RelacionActivaPeroSinCodigoUpc_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        // Relación ACTIVA pero con el código en blanco: no habilita la compra.
+        await SembrarRelacionAsync(_articuloB, codigoUpc: null);
+
+        var dto = NuevaOrden();
+        dto.Detalles.Single().ArticuloId = _articuloB;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _service!.CrearAsync(dto, "tester"));
+    }
+
+    [SkippableFact]
+    public async Task Crear_RelacionDeshabilitada_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        await SembrarRelacionAsync(_articuloB, UpcB, activo: false);
+
+        var dto = NuevaOrden();
+        dto.Detalles.Single().ArticuloId = _articuloB;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _service!.CrearAsync(dto, "tester"));
+    }
+
+    [SkippableFact]
+    public async Task Crear_GuardaElCodigoDelCatalogo_NoElQueMandaElCliente()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var dto = NuevaOrden();
+        dto.Detalles.Single().CodigoUpc = "INVENTADO-POR-EL-CLIENTE";
+
+        var creada = await _service!.CrearAsync(dto, "tester");
+
+        Assert.Equal(UpcA, creada.Detalles.Single().CodigoUpc);
+    }
+
+    [SkippableFact]
+    public async Task BuscarArticulosProveedor_SoloDevuelveLosQueTienenCodigo()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        // B queda con relación activa pero SIN código: no debe aparecer.
+        await SembrarRelacionAsync(_articuloB, codigoUpc: null);
+
+        var lista = await _service!.BuscarArticulosProveedorAsync(_codProveedor, null);
+
+        Assert.Contains(lista, x => x.ArticuloId == _articuloA);
+        Assert.DoesNotContain(lista, x => x.ArticuloId == _articuloB);
+        Assert.All(lista, x => Assert.False(string.IsNullOrWhiteSpace(x.CodigoUpc)));
+    }
+
+    // ── Cotas de rango ───────────────────────────────────────────────────────
+
+    [SkippableFact]
+    public async Task Crear_DescuentoMayorA100_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        // Sin la guarda esto persistía un total NEGATIVO y la orden se podía aprobar.
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service!.CrearAsync(NuevaOrden(descuento: 150m), "tester"));
+        Assert.Contains("entre 0 y 100", ex.Message);
+    }
+
+    [SkippableFact]
+    public async Task Crear_DescuentoNegativo_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service!.CrearAsync(NuevaOrden(descuento: -5m), "tester"));
+    }
+
+    [SkippableFact]
+    public async Task Crear_CantidadFueraDeRango_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var dto = NuevaOrden();
+        dto.Detalles.Single().CantidadPedida = 99_999_999_999m;   // no cabe en NUMERIC(14,4)
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _service!.CrearAsync(dto, "tester"));
+    }
+
+    [SkippableFact]
+    public async Task Crear_SinRenglones_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var dto = NuevaOrden();
+        dto.Detalles.Clear();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _service!.CrearAsync(dto, "tester"));
+    }
+
+    [SkippableFact]
+    public async Task Crear_ProveedorInexistente_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var dto = NuevaOrden();
+        dto.CodProveedor = "ZZZZ-NO-EXISTE";
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _service!.CrearAsync(dto, "tester"));
+    }
+
+    // ── Máquina de estados ───────────────────────────────────────────────────
+
+    [SkippableFact]
+    public async Task Aprobar_PasaAAprobadaYEstampaUsuario()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var creada = await _service!.CrearAsync(NuevaOrden(), "tester");
+
+        Assert.True(await _service.AprobarAsync(creada.Id, "jefe"));
+
+        var recargada = await _service.GetByIdAsync(creada.Id);
+        Assert.Equal(EstadoOrdenCompra.Aprobada, recargada!.Estado);
+        Assert.Equal("jefe", recargada.AprobadoPor);
+        Assert.NotNull(recargada.FechaAprobacion);
+    }
+
+    [SkippableFact]
+    public async Task Aprobar_DosVeces_EsIdempotente()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var creada = await _service!.CrearAsync(NuevaOrden(), "tester");
+
+        Assert.True(await _service.AprobarAsync(creada.Id, "jefe"));
+        Assert.True(await _service.AprobarAsync(creada.Id, "jefe"));
+
+        Assert.Equal(EstadoOrdenCompra.Aprobada, (await _service.GetByIdAsync(creada.Id))!.Estado);
+    }
+
+    [SkippableFact]
+    public async Task Aprobar_Inexistente_DevuelveFalse()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        Assert.False(await _service!.AprobarAsync(-1, "jefe"));
+    }
+
+    [SkippableFact]
+    public async Task Actualizar_OrdenAprobada_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var creada = await _service!.CrearAsync(NuevaOrden(), "tester");
+        await _service.AprobarAsync(creada.Id, "jefe");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service.ActualizarAsync(creada.Id, NuevaOrden(), "tester"));
+    }
+
+    [SkippableFact]
+    public async Task Actualizar_EnBorrador_ReemplazaRenglonesYRecalcula()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var creada = await _service!.CrearAsync(NuevaOrden(), "tester");
+
+        var cambios = NuevaOrden();
+        cambios.Detalles.Single().CantidadPedida = 4m;      // 4 × 25.50 = 102.00
+
+        var actualizada = await _service.ActualizarAsync(creada.Id, cambios, "tester");
+
+        Assert.Single(actualizada.Detalles);
+        Assert.Equal(4m, actualizada.Detalles.Single().CantidadPedida);
+        Assert.Equal(102.00m, actualizada.SubTotal);
+        Assert.Equal(creada.Numero, actualizada.Numero);    // el número no cambia
+    }
+
+    [SkippableFact]
+    public async Task Anular_EnBorrador_Ok()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var creada = await _service!.CrearAsync(NuevaOrden(), "tester");
+
+        Assert.True(await _service.AnularAsync(creada.Id, "tester"));
+        Assert.Equal(EstadoOrdenCompra.Anulada, (await _service.GetByIdAsync(creada.Id))!.Estado);
+    }
+
+    [SkippableFact]
+    public async Task Anular_ConRenglonYaRecibido_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var creada = await _service!.CrearAsync(NuevaOrden(), "tester");
+        await _service.AprobarAsync(creada.Id, "jefe");
+
+        // Simula una recepción parcial sobre el renglón.
+        var renglon = await _context!.alm_orden_compra_detalles
+            .FirstAsync(d => d.orden_compra_id == creada.Id);
+        renglon.cantidad_aplicada = 3m;
+        await _context.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _service.AnularAsync(creada.Id, "tester"));
+    }
+
+    [SkippableFact]
+    public async Task GetById_Inexistente_DevuelveNull()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        Assert.Null(await _service!.GetByIdAsync(-1));
+    }
+
+    [SkippableFact]
+    public async Task Get_FiltraPorEstado()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var borrador = await _service!.CrearAsync(NuevaOrden(), "tester");
+        var aprobada = await _service.CrearAsync(NuevaOrden(), "tester");
+        await _service.AprobarAsync(aprobada.Id, "jefe");
+
+        var soloAprobadas = await _service.GetAsync(new OrdenCompraFilterDto { Estado = EstadoOrdenCompra.Aprobada });
+
+        Assert.Contains(soloAprobadas, o => o.Id == aprobada.Id);
+        Assert.DoesNotContain(soloAprobadas, o => o.Id == borrador.Id);
+    }
+
+    /// <summary>
+    /// El listado pinta el correlativo con relleno de ceros («00052») y eso es lo que la gente
+    /// teclea o copia; el buscador tiene que encontrarlo tanto así como sin los ceros. Antes solo
+    /// funcionaba la forma corta y el buscador parecía roto justo con el dato que se muestra.
+    /// </summary>
+    [SkippableFact]
+    public async Task Get_BuscaPorNumeroConYSinCerosALaIzquierda()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var creada = await _service!.CrearAsync(NuevaOrden(), "tester");
+
+        var comoSeMuestra = creada.Numero.ToString("00000");   // 52 -> "00052"
+        var comoSeGuarda = creada.Numero.ToString();           // 52 -> "52"
+
+        var porFormato = await _service.GetAsync(new OrdenCompraFilterDto { Search = comoSeMuestra });
+        var porEntero = await _service.GetAsync(new OrdenCompraFilterDto { Search = comoSeGuarda });
+
+        Assert.Contains(porFormato, o => o.Id == creada.Id);
+        Assert.Contains(porEntero, o => o.Id == creada.Id);
+    }
+
+    /// <summary>
+    /// Un término de solo ceros no puede colapsar a cadena vacía: <c>Contains("")</c> devolvería
+    /// TODAS las órdenes, convirtiendo un filtro en un listado completo.
+    /// </summary>
+    [SkippableFact]
+    public async Task Get_BuscarSoloCeros_NoDevuelveTodo()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        await _service!.CrearAsync(NuevaOrden(), "tester");
+
+        var todas = await _service.GetAsync(new OrdenCompraFilterDto());
+        var ceros = await _service.GetAsync(new OrdenCompraFilterDto { Search = "000" });
+
+        // "000" busca el dígito 0 dentro del número, no "cualquier cosa".
+        Assert.True(ceros.Count < todas.Count || todas.All(o => o.Numero.ToString().Contains('0')));
+    }
+
+    // ── Fecha de entrega pactada ─────────────────────────────────────────────
+
+    [SkippableFact]
+    public async Task Crear_SinFechaEntregaPactada_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        // Es el insumo del criterio de puntualidad: sin ella la orden no se guarda ni en borrador.
+        var dto = NuevaOrden();
+        dto.FechaEntregaPactada = null;
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service!.CrearAsync(dto, "tester"));
+        Assert.Contains("fecha de entrega pactada", ex.Message);
+    }
+
+    [SkippableFact]
+    public async Task Crear_FechaEntregaAnteriorALaOrden_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var dto = NuevaOrden();
+        dto.FechaEntregaPactada = dto.Fecha!.Value.AddDays(-1);   // nacería vencida
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service!.CrearAsync(dto, "tester"));
+        Assert.Contains("anterior a la fecha de la orden", ex.Message);
+    }
+
+    [SkippableFact]
+    public async Task Crear_FechaEntregaDemasiadoLejos_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        // Dedazo típico en el año: sin la cota entraría y ensuciaría el indicador de puntualidad.
+        var dto = NuevaOrden();
+        dto.FechaEntregaPactada = dto.Fecha!.Value.AddYears(6);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service!.CrearAsync(dto, "tester"));
+        Assert.Contains("revise el año", ex.Message);
+    }
+
+    [SkippableFact]
+    public async Task Crear_GuardaLaFechaDeCabeceraYLaDelRenglon()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var dto = NuevaOrden();
+        var pactadaRenglon = dto.Fecha!.Value.AddDays(20);
+        dto.Detalles.Single().FechaEntregaPactada = pactadaRenglon;
+
+        var creada = await _service!.CrearAsync(dto, "tester");
+
+        Assert.Equal(dto.FechaEntregaPactada, creada.FechaEntregaPactada);
+        Assert.Equal(pactadaRenglon, creada.Detalles.Single().FechaEntregaPactada);
+
+        // Y se relee igual desde la BD, no sólo del objeto que devolvió el alta.
+        var releida = await _service.GetByIdAsync(creada.Id);
+        Assert.Equal(dto.FechaEntregaPactada, releida!.FechaEntregaPactada);
+        Assert.Equal(pactadaRenglon, releida.Detalles.Single().FechaEntregaPactada);
+    }
+
+    [SkippableFact]
+    public async Task Crear_RenglonSinFechaPropia_QuedaNulo()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        // NULL en el renglón significa "rige la de la cabecera": no se copia la de arriba.
+        var creada = await _service!.CrearAsync(NuevaOrden(), "tester");
+
+        Assert.NotNull(creada.FechaEntregaPactada);
+        Assert.Null(creada.Detalles.Single().FechaEntregaPactada);
+    }
+
+    [SkippableFact]
+    public async Task Crear_RenglonConFechaAnteriorALaOrden_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var dto = NuevaOrden();
+        dto.Detalles.Single().FechaEntregaPactada = dto.Fecha!.Value.AddDays(-3);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service!.CrearAsync(dto, "tester"));
+        Assert.Contains("fecha de entrega del renglón", ex.Message);
+    }
+
+    [SkippableFact]
+    public async Task Actualizar_CambiaLaFechaEntregaPactada()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var creada = await _service!.CrearAsync(NuevaOrden(), "tester");
+
+        var cambios = NuevaOrden();
+        cambios.FechaEntregaPactada = creada.Fecha!.Value.AddDays(30);
+
+        var actualizada = await _service.ActualizarAsync(creada.Id, cambios, "tester");
+
+        Assert.Equal(cambios.FechaEntregaPactada, actualizada.FechaEntregaPactada);
+    }
+
+    [SkippableFact]
+    public async Task Get_ElListadoTraeLaFechaEntregaPactada()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var creada = await _service!.CrearAsync(NuevaOrden(), "tester");
+
+        var lista = await _service.GetAsync(new OrdenCompraFilterDto());
+        var fila = Assert.Single(lista, o => o.Id == creada.Id);
+
+        Assert.Equal(creada.FechaEntregaPactada, fila.FechaEntregaPactada);
+    }
+
+    // ── Apoyo ────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Orden mínima válida: un renglón de 10 × 25.50 sobre el artículo A. El ISV NO se pasa a
+    /// mano: lo calcula el servicio desde la tasa del tipo del artículo (ver los helpers de
+    /// sembrado). Sin tasa sembrada, el renglón va sin ISV.
+    /// </summary>
+    private OrdenCompraDto NuevaOrden(decimal descuento = 0m) => new()
+    {
+        CodProveedor = _codProveedor,
+        Fecha = DateOnly.FromDateTime(DateTime.Today),
+        // Obligatoria desde el borrador (2026-08-14_alm_orden_compra_fecha_entrega.sql).
+        FechaEntregaPactada = DateOnly.FromDateTime(DateTime.Today).AddDays(7),
+        CalculaIsv = true,
+        Descuento = descuento,
+        OtrosGastos = 0m,
+        Observaciones = "Orden de prueba",
+        Detalles = new List<OrdenCompraDetalleDto>
+        {
+            new()
+            {
+                ArticuloId = _articuloA,
+                CantidadPedida = 10m,
+                CostoUnitario = 25.50m,
+                Descripcion = "Renglón de prueba"
+            }
+        }
+    };
+
+    /// <summary>
+    /// Asigna al tipo del artículo una tasa de ISV vigente del <paramref name="porcentaje"/>%
+    /// (misma mecánica que la recepción). Si el artículo no tiene tipo, crea uno de prueba.
+    /// </summary>
+    private async Task SembrarIsvDelArticuloAsync(int articuloId, decimal porcentaje)
+    {
+        var hoy = DateOnly.FromDateTime(DateTime.Today);
+        var tasaId = await _context!.cfg_impuesto_tasas.AsNoTracking()
+            .Where(t => t.porcentaje == porcentaje
+                     && t.vigencia_desde <= hoy
+                     && (t.vigencia_hasta == null || t.vigencia_hasta >= hoy))
+            .Select(t => (int?)t.id)
+            .FirstOrDefaultAsync();
+
+        Skip.If(tasaId is null, $"El catálogo cfg_impuesto_tasa no tiene una tasa vigente del {porcentaje}%");
+
+        var articulo = await _context.alm_articulos.FirstAsync(a => a.id == articuloId);
+        var tipo = articulo.tipo_articulo_id is null
+            ? null
+            : await _context.alm_tipo_articulos.FirstOrDefaultAsync(t => t.id == articulo.tipo_articulo_id);
+
+        if (tipo is null)
+        {
+            tipo = new alm_tipo_articulo { codigo = "ZOC", descripcion = "Tipo de prueba", activo = true };
+            _context.alm_tipo_articulos.Add(tipo);
+            await _context.SaveChangesAsync();
+            articulo.tipo_articulo_id = tipo.id;
+        }
+
+        tipo.impuesto_tasa_id = tasaId;
+        await _context.SaveChangesAsync();
+    }
+
+    /// <summary>Deja al tipo del artículo sin tasa de ISV (para probar el caso "no configurado").</summary>
+    private async Task QuitarIsvDelArticuloAsync(int articuloId)
+    {
+        var articulo = await _context!.alm_articulos.AsNoTracking().FirstAsync(a => a.id == articuloId);
+        if (articulo.tipo_articulo_id is null) return;
+
+        var tipo = await _context.alm_tipo_articulos.FirstAsync(t => t.id == articulo.tipo_articulo_id);
+        tipo.impuesto_tasa_id = null;
+        await _context.SaveChangesAsync();
+    }
+
+    private async Task SembrarRelacionAsync(int articuloId, string? codigoUpc, bool activo = true)
+    {
+        await BorrarRelacionAsync(articuloId);
+
+        _context!.alm_articulo_proveedors.Add(new alm_articulo_proveedor
+        {
+            articulo_id = articuloId,
+            cod_proveedor = _codProveedor,
+            codigo_upc = codigoUpc,
+            costo = 25.50m,
+            principal = false,
+            activo = activo
+        });
+        await _context.SaveChangesAsync();
+    }
+
+    private async Task BorrarRelacionAsync(int articuloId)
+    {
+        var previas = await _context!.alm_articulo_proveedors
+            .Where(p => p.articulo_id == articuloId && p.cod_proveedor == _codProveedor)
+            .ToListAsync();
+
+        if (previas.Count > 0)
+        {
+            _context.alm_articulo_proveedors.RemoveRange(previas);
+            await _context.SaveChangesAsync();
+        }
+    }
+
+    private class TestCurrentCompanyService : ICurrentCompanyService
+    {
+        private readonly long _companyId;
+        public TestCurrentCompanyService(long companyId) => _companyId = companyId;
+        public long GetCompanyId() => _companyId;
+    }
+}

@@ -1,5 +1,5 @@
 @page "/libretas"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Configuracion.View)]
 
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Libretas
@@ -9,7 +9,7 @@
 <PageTitle>SIAD - Libretas</PageTitle>
 
 <div class="page-container">
-    <DxToastProvider Name="LibretasToast" MaxToastCount="4" />
+    <DxToastProvider Name="LibretasToast" MaxToastCount="4" StickToViewport="true" />
     <div class="header-section">
         <div>
             <h2 class="page-title">Libretas de lectura</h2>

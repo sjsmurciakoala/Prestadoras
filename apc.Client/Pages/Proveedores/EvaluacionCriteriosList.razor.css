@@ -1,0 +1,37 @@
+/* Sólo lo propio de esta pantalla; el estándar se hereda de siad-grid.css. */
+
+.suma-card {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+
+.suma-card .summary-value {
+    font-size: 1.9rem;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.suma-nota {
+    flex: 1;
+    min-width: 280px;
+    font-size: 13px;
+    color: #5c676f;
+    line-height: 1.5;
+}
+
+.tag-origen {
+    font-size: 10.5px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 4px;
+    border: 1px solid #ced4da;
+    color: #6c757d;
+    white-space: nowrap;
+}
+
+.tag-origen.auto   { border-color: #0d6efd; color: #0d6efd; }
+.tag-origen.manual { border-color: #fd7e14; color: #fd7e14; }

@@ -8,12 +8,12 @@
 @inject IdentityRedirectManager RedirectManager
 @inject ILogger<LoginWith2fa> Logger
 
-<PageTitle>Two-factor authentication</PageTitle>
+<PageTitle>Verificación en dos pasos</PageTitle>
 <div class="main-content">
     <div class="block-content">
         <div class="title">
-            <div class="title-header-text">Two-factor authentication</div>
-            <div class="title-content-text-secondary">Your login is protected with an authenticator app. Enter your authenticator code below.</div>
+            <div class="title-header-text">Verificación en dos pasos</div>
+            <div class="title-content-text-secondary">Su inicio de sesión está protegido con una aplicación de autenticación. Escriba abajo el código que le muestra.</div>
         </div>
         <StatusMessage Message="@message" />
         <EditForm Model="Input" FormName="login-with-2fa" OnValidSubmit="OnValidSubmitAsync" method="post" Context="LoginWithFA">
@@ -22,14 +22,14 @@
             <DataAnnotationsValidator />
             <ValidationSummary class="text-danger" role="alert" />
             <DxFormLayout CaptionPosition=@CaptionPosition.Vertical>
-                <DxFormLayoutItem Caption="Authenticator code" ColSpanMd="12" BeginRow="true">
+                <DxFormLayoutItem Caption="Código de autenticación" ColSpanMd="12" BeginRow="true">
                     <InteractiveServerMaskedInput Name="Input.TwoFactorCode" CssClass="large-input" Value="@Input.TwoFactorCode" Mask="000 000" />
                 </DxFormLayoutItem>
                 <DxFormLayoutItem ColSpanMd="12" BeginRow="true">
-                    <InteractiveServerCheckbox Name="Input.RememberMachine" InputId="rememberme" Value="@Input.RememberMachine" LabelText="Remember this machine"></InteractiveServerCheckbox>
+                    <InteractiveServerCheckbox Name="Input.RememberMachine" InputId="rememberme" Value="@Input.RememberMachine" LabelText="Recordar este equipo"></InteractiveServerCheckbox>
                 </DxFormLayoutItem>
                 <DxFormLayoutItem ColSpanMd="12" BeginRow="true">
-                    <DxButton CssClass="w-100" SubmitFormOnClick="true" Text="Log in"></DxButton>
+                    <DxButton CssClass="w-100" SubmitFormOnClick="true" Text="Iniciar sesión"></DxButton>
                 </DxFormLayoutItem>
             </DxFormLayout>
         </EditForm>
@@ -80,10 +80,10 @@
         [Required]
         [StringLength(7, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 6)]
         [DataType(DataType.Text)]
-        [Display(Name = "Authenticator code")]
+        [Display(Name = "Código de autenticación")]
         public string? TwoFactorCode { get; set; }
 
-        [Display(Name = "Remember this machine")]
+        [Display(Name = "Recordar este equipo")]
         public bool RememberMachine { get; set; }
     }
 }

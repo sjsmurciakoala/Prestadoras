@@ -1,0 +1,734 @@
+@page "/almacen/ordenes-compra"
+@attribute [Authorize(Policy = PermissionNames.Inventario.View)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.DTOs.Aprobaciones
+@using SIAD.Core.DTOs.Proveedores
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+@using apc.Client.Services.Proveedores
+
+@inject IJSRuntime JS
+@inject OrdenesCompraClient OrdenesClient
+@inject ProveedoresClient ProveedoresClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>SIAD - Órdenes de compra</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="OrdenesCompraToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Órdenes de compra</h2>
+            <p class="page-subtitle">Pedidos a proveedores: se aprueban y luego se reciben</p>
+        </div>
+
+        <DxButton Text="Nueva orden"
+                  IconCssClass="bi bi-plus-lg"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern"
+                  Click="@(() => Navigation.NavigateTo("/almacen/ordenes-compra/nueva"))" />
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Órdenes</div>
+                <div class="summary-value">@ordenes.Count.ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card summary-warning">
+                <div class="summary-label">En borrador</div>
+                <div class="summary-value">@ordenes.Count(o => o.Estado == EstadoOrdenCompra.Borrador).ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Aprobadas</div>
+                <div class="summary-value">@ordenes.Count(o => o.Estado == EstadoOrdenCompra.Aprobada).ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Monto total</div>
+                <div class="summary-value">@ordenes.Sum(o => o.Total).ToString("N2")</div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@ordenes" KeyFieldName="@nameof(OrdenCompraListItemDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)"
+                                   Placeholder="Buscar número, proveedor, observaciones..." InputDelay="600"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="me-1"
+                                   Style="min-width: 260px;" />
+
+                        <DxComboBox Data="@proveedores" Value="@filtroProveedor"
+                                    ValueChanged="@((string? v) => OnProveedorChanged(v))"
+                                    ValueFieldName="@nameof(ProveedorComboItem.Codigo)"
+                                    TextFieldName="@nameof(ProveedorComboItem.Display)"
+                                    NullText="Todos los proveedores"
+                                    FilteringMode="DataGridFilteringMode.Contains"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Style="min-width: 240px;" CssClass="me-1" />
+
+                        <DxComboBox Data="@estadosFiltro" Value="@estadoSeleccionado"
+                                    ValueChanged="@((EstadoOpcion? e) => OnEstadoChanged(e))"
+                                    TextFieldName="@nameof(EstadoOpcion.Etiqueta)"
+                                    NullText="Todos los estados"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Style="min-width: 170px;" CssClass="me-1" />
+
+                        <DxDateEdit @bind-Date="fechaDesde" NullText="Desde"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    CssClass="me-1" Style="min-width: 130px;" />
+                        <DxDateEdit @bind-Date="fechaHasta" NullText="Hasta"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    CssClass="me-1" Style="min-width: 130px;" />
+
+                        <DxButton Text="Consultar" IconCssClass="bi bi-search"
+                                  RenderStyle="ButtonRenderStyle.Primary" Click="CargarAsync" CssClass="me-1" />
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@ordenes.Count.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(OrdenCompraListItemDto.Numero)" Caption="No." Width="90px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is OrdenCompraListItemDto item)
+                            {
+                                <span class="fw-semibold">@item.Numero.ToString("00000")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(OrdenCompraListItemDto.Fecha)" Caption="Fecha" Width="110px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is OrdenCompraListItemDto item)
+                            {
+                                <span>@(item.Fecha.HasValue ? item.Fecha.Value.ToString("dd/MM/yyyy") : "—")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(OrdenCompraListItemDto.FechaEntregaPactada)" Caption="Entrega pactada" Width="140px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is OrdenCompraListItemDto item)
+                            {
+                                @if (!item.FechaEntregaPactada.HasValue)
+                                {
+                                    @* Órdenes anteriores al 2026-08-14: nacieron sin este dato. *@
+                                    <span class="text-muted">—</span>
+                                }
+                                else
+                                {
+                                    <span class="@(EntregaVencida(item) ? "text-danger fw-semibold" : "")">
+                                        @item.FechaEntregaPactada.Value.ToString("dd/MM/yyyy")
+                                    </span>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(OrdenCompraListItemDto.ProveedorNombre)" Caption="Proveedor" MinWidth="240">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is OrdenCompraListItemDto item)
+                            {
+                                <div class="d-flex flex-column">
+                                    <span class="text-dark fw-semibold">@(string.IsNullOrWhiteSpace(item.ProveedorNombre) ? item.CodProveedor : item.ProveedorNombre)</span>
+                                    <span class="text-muted small">@item.CodProveedor</span>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(OrdenCompraListItemDto.Renglones)" Caption="Renglones" Width="110px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is OrdenCompraListItemDto item)
+                            {
+                                <span class="text-muted">@item.Renglones.ToString("N0")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(OrdenCompraListItemDto.Total)" Caption="Total" Width="140px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is OrdenCompraListItemDto item)
+                            {
+                                <span class="text-dark fw-semibold">@item.Total.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(OrdenCompraListItemDto.Estado)" Caption="Estado" Width="140px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is OrdenCompraListItemDto item)
+                            {
+                                @* La nota va en su propia línea, no dentro de la píldora: así el
+                                   badge mide siempre lo mismo y no se corta (mismo patrón de dos
+                                   líneas que la columna Proveedor). *@
+                                <div class="d-flex flex-column align-items-center gap-1">
+                                    <span class="badge-estado-oc @ClaseEstado(item.Estado)">@item.EstadoDescripcion</span>
+                                    @{
+                                        var nota = NotaAprobacion(item);
+                                    }
+                                    @if (nota is not null)
+                                    {
+                                        <span class="@(SinAprobador(item) ? "text-danger small fw-semibold" : "text-muted small")">@nota</span>
+                                    }
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Acciones" Width="150px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is OrdenCompraListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-edit"
+                                            title="@(item.Estado == EstadoOrdenCompra.Borrador ? "Editar" : "Ver")"
+                                            @onclick="() => Abrir(item.Id)" @onclick:stopPropagation="true">
+                                        <i class="@(item.Estado == EstadoOrdenCompra.Borrador ? "bi bi-pencil-square" : "bi bi-eye")"></i>
+                                    </button>
+
+                                    @* Con la escalera encendida, un borrador se ENVÍA a aprobación;
+                                       sin ella se aprueba de un clic, como siempre. *@
+                                    @if (item.Estado == EstadoOrdenCompra.Borrador && !aprobacion.Encendido)
+                                    {
+                                        <button type="button" class="btn-icon btn-edit" title="Aprobar"
+                                                @onclick="() => ConfirmarAprobar(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-check-lg"></i>
+                                        </button>
+                                    }
+
+                                    @if (item.Estado == EstadoOrdenCompra.Borrador && aprobacion.Encendido)
+                                    {
+                                        <button type="button" class="btn-icon btn-edit" title="Enviar a aprobación"
+                                                @onclick="() => ConfirmarEnviarAprobacion(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-send"></i>
+                                        </button>
+                                    }
+
+                                    @if (item.Estado == EstadoOrdenCompra.EnAprobacion && aprobacion.PuedoFirmar)
+                                    {
+                                        <button type="button" class="btn-icon btn-edit" title="Firmar"
+                                                @onclick="() => ConfirmarFirmar(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-pen"></i>
+                                        </button>
+                                        <button type="button" class="btn-icon btn-edit" title="Devolver a borrador"
+                                                @onclick="() => ConfirmarDevolver(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-arrow-counterclockwise"></i>
+                                        </button>
+                                    }
+
+                                    @if (item.Estado is EstadoOrdenCompra.Borrador or EstadoOrdenCompra.EnAprobacion)
+                                    {
+                                        <button type="button" class="btn-icon btn-delete" title="Rechazar"
+                                                @onclick="() => ConfirmarRechazar(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-hand-thumbs-down"></i>
+                                        </button>
+                                    }
+
+                                    @* Cancelar y cerrar existen porque anular exige que NO haya
+                                       recepciones: son la salida para una orden ya recibida en parte. *@
+                                    @if (item.Estado is EstadoOrdenCompra.Aprobada or EstadoOrdenCompra.RecibidaParcial)
+                                    {
+                                        <button type="button" class="btn-icon btn-delete" title="Cancelar lo pendiente"
+                                                @onclick="() => ConfirmarCancelar(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-slash-circle"></i>
+                                        </button>
+                                    }
+
+                                    @if (item.Estado == EstadoOrdenCompra.RecibidaParcial)
+                                    {
+                                        <button type="button" class="btn-icon btn-edit" title="Cerrar anticipadamente"
+                                                @onclick="() => ConfirmarCerrar(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-check2-square"></i>
+                                        </button>
+                                    }
+
+                                    @if (item.Estado is EstadoOrdenCompra.Borrador or EstadoOrdenCompra.EnAprobacion or EstadoOrdenCompra.Aprobada)
+                                    {
+                                        <button type="button" class="btn-icon btn-delete" title="Anular"
+                                                @onclick="() => ConfirmarAnular(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-x-circle"></i>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay órdenes de compra para los filtros seleccionados.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(430px, 90vw)" HeaderText="Confirmar acción" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            @* Código de color de las acciones: VERDE la orden avanza · ROJO se detiene (rechazo,
+               anulación) · ÁMBAR se da por terminada sin rechazarla (cancelar, cerrar, devolver).
+               Con una sola condición, "enviar a aprobación" salía con un aspa que asusta sin motivo. *@
+            <div class="mb-3 @ClaseTextoAccion">
+                <i class="@IconoAccion" style="font-size: 3rem;"></i>
+            </div>
+            <h5 class="fw-bold">@TituloAccion</h5>
+            <p class="text-muted">@DetalleAccion</p>
+            @if (ordenAccion is not null)
+            {
+                <div class="fw-semibold">
+                    O/C @ordenAccion.Numero.ToString("00000") — @(string.IsNullOrWhiteSpace(ordenAccion.ProveedorNombre) ? ordenAccion.CodProveedor : ordenAccion.ProveedorNombre)
+                </div>
+            }
+
+            @if (AccionExigeMotivo)
+            {
+                <div class="mt-3 text-start">
+                    <label class="form-label small fw-semibold">Motivo</label>
+                    <DxMemo @bind-Text="motivoAccion" Rows="2" CssClass="w-100"
+                            NullText="@PlaceholderMotivo" />
+                    @if (accion is AccionOrden.Rechazar or AccionOrden.Devolver)
+                    {
+                        <div class="form-text">Obligatorio: queda en la bitácora y se le envía al comprador.</div>
+                    }
+                </div>
+            }
+
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Volver" Click="CancelarAccion"
+                          RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Enabled="@(!procesando)" />
+                <DxButton Text="@BotonAccion"
+                          Click="EjecutarAccionAsync" Enabled="@(!procesando)"
+                          RenderStyle="@EstiloBotonAccion"
+                          IconCssClass="@IconoBotonAccion" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private sealed class EstadoOpcion
+    {
+        public short Codigo { get; init; }
+        public string Etiqueta { get; init; } = string.Empty;
+    }
+
+    /// <summary>Item del combo de proveedores: código + "código — nombre" (para buscar por ambos).</summary>
+    private sealed class ProveedorComboItem
+    {
+        public string Codigo { get; set; } = string.Empty;
+        public string Nombre { get; set; } = string.Empty;
+        public string Display => $"{Codigo} — {Nombre}";
+    }
+
+    private const string GridLayoutStorageKey = "almacen-ordenes-compra-grid-layout";
+
+    private DxGrid? grid;
+    private List<OrdenCompraListItemDto> ordenes = new();
+    private List<ProveedorComboItem> proveedores = new();
+
+    private readonly List<EstadoOpcion> estadosFiltro = new()
+    {
+        new EstadoOpcion { Codigo = EstadoOrdenCompra.Borrador,        Etiqueta = "Borrador" },
+        new EstadoOpcion { Codigo = EstadoOrdenCompra.EnAprobacion,    Etiqueta = "En aprobación" },
+        new EstadoOpcion { Codigo = EstadoOrdenCompra.Aprobada,        Etiqueta = "Aprobada" },
+        new EstadoOpcion { Codigo = EstadoOrdenCompra.RecibidaParcial, Etiqueta = "Recibida parcial" },
+        new EstadoOpcion { Codigo = EstadoOrdenCompra.Cerrada,         Etiqueta = "Cerrada" },
+        new EstadoOpcion { Codigo = EstadoOrdenCompra.Rechazada,       Etiqueta = "Rechazada" },
+        new EstadoOpcion { Codigo = EstadoOrdenCompra.Cancelada,       Etiqueta = "Cancelada" },
+        new EstadoOpcion { Codigo = EstadoOrdenCompra.Anulada,         Etiqueta = "Anulada" }
+    };
+
+    private string filtroBusqueda = string.Empty;
+    private string? filtroProveedor;
+    private EstadoOpcion? estadoSeleccionado;
+    private DateTime? fechaDesde;
+    private DateTime? fechaHasta;
+
+    private bool isLoading;
+    private string? errorMessage;
+
+    private bool confirmVisible;
+    /// <summary>Transiciones que la fila ofrece. Cancelar y cerrar exigen motivo.</summary>
+    private enum AccionOrden { Aprobar, Anular, Rechazar, Cancelar, Cerrar, EnviarAprobacion, Firmar, Devolver }
+
+    private AccionOrden accion = AccionOrden.Aprobar;
+    private string motivoAccion = string.Empty;
+
+    /// <summary>Rechazar, cancelar y cerrar cierran la orden antes de tiempo: hay que justificarlas.</summary>
+    /// <summary>
+    /// Acciones que hacen AVANZAR la orden. Deciden el color y el icono del diálogo: no es lo
+    /// mismo confirmar un envío a aprobación que confirmar una anulación.
+    /// </summary>
+    private bool AccionEsPositiva
+        => accion is AccionOrden.Aprobar or AccionOrden.EnviarAprobacion or AccionOrden.Firmar;
+
+    /// <summary>
+    /// Acciones que DETIENEN la orden para siempre. Cancelar y cerrar no entran: dan por terminado
+    /// lo pendiente de una orden legítima, y pintarlas de rojo alarmaría sin razón.
+    /// </summary>
+    private bool AccionEsRechazo
+        => accion is AccionOrden.Rechazar or AccionOrden.Anular;
+
+    private string ClaseTextoAccion
+        => AccionEsPositiva ? "text-success" : AccionEsRechazo ? "text-danger" : "text-warning";
+
+    private string IconoAccion
+        => AccionEsPositiva ? "bi bi-check-circle" : "bi bi-x-circle";
+
+    private ButtonRenderStyle EstiloBotonAccion
+        => AccionEsPositiva ? ButtonRenderStyle.Success
+         : AccionEsRechazo ? ButtonRenderStyle.Danger
+         : ButtonRenderStyle.Warning;
+
+    private string IconoBotonAccion
+        => AccionEsPositiva ? "bi bi-check-lg" : "bi bi-x-circle";
+
+    /// <summary>El motivo se pide por razones distintas según la acción; el ejemplo lo dice.</summary>
+    private string PlaceholderMotivo => accion switch
+    {
+        AccionOrden.Rechazar => "Por qué se rechaza",
+        AccionOrden.Devolver => "Qué hay que corregir",
+        AccionOrden.Cancelar => "Por qué ya no se va a recibir",
+        _                    => "Por qué se cierra la orden antes de tiempo"
+    };
+
+    private bool AccionExigeMotivo
+        => accion is AccionOrden.Rechazar or AccionOrden.Cancelar or AccionOrden.Cerrar
+                  or AccionOrden.Devolver;
+
+    private string TituloAccion => accion switch
+    {
+        AccionOrden.Aprobar  => "¿Aprobar la orden?",
+        AccionOrden.Anular   => "¿Anular la orden?",
+        AccionOrden.Rechazar => "¿Rechazar la orden?",
+        AccionOrden.Cancelar => "¿Cancelar la orden?",
+        AccionOrden.EnviarAprobacion => "¿Enviar la orden a aprobación?",
+        AccionOrden.Firmar   => "¿Firmar la orden?",
+        AccionOrden.Devolver => "¿Devolver la orden a borrador?",
+        _                    => "¿Cerrar la orden?"
+    };
+
+    private string DetalleAccion => accion switch
+    {
+        AccionOrden.Aprobar  => "Una vez aprobada ya no se puede editar. Quedará lista para recibirse.",
+        AccionOrden.Anular   => "La orden quedará anulada. Sólo se puede anular si no tiene recepciones.",
+        AccionOrden.Rechazar => "La orden quedará rechazada y no podrá aprobarse.",
+        AccionOrden.Cancelar => "Lo pedido y no recibido ya no se recibirá. Si había presupuesto comprometido, el saldo pendiente se libera.",
+        AccionOrden.EnviarAprobacion => "Dejará de ser editable. La aprueba, de una sola firma, quien tenga un límite de autorización que alcance su monto.",
+        AccionOrden.Firmar   => "La orden quedará aprobada con su nivel de autorización, en un solo paso.",
+        AccionOrden.Devolver => "Se borrarán las firmas y volverá a ser editable. Si había presupuesto reservado, se libera.",
+        _                    => "Se da por suficiente lo recibido. Si había presupuesto comprometido, el saldo pendiente se libera."
+    };
+
+    private string BotonAccion => accion switch
+    {
+        AccionOrden.Aprobar  => "Sí, aprobar",
+        AccionOrden.Anular   => "Sí, anular",
+        AccionOrden.Rechazar => "Sí, rechazar",
+        AccionOrden.Cancelar => "Sí, cancelar",
+        AccionOrden.EnviarAprobacion => "Sí, enviar",
+        AccionOrden.Firmar   => "Sí, firmar",
+        AccionOrden.Devolver => "Sí, devolver",
+        _                    => "Sí, cerrar"
+    };
+    private bool procesando;
+    private OrdenCompraListItemDto? ordenAccion;
+
+    /// <summary>
+    /// Qué ofrece la pantalla según el control de la empresa. Se consulta una vez por carga; si
+    /// falla queda apagado, que es el comportamiento histórico.
+    /// </summary>
+    private OrdenesCompraClient.AprobacionConfigVista aprobacion = new();
+
+    /// <summary>
+    /// Por orden en aprobación, si existe alguien con límite suficiente. Vacío con el control
+    /// apagado.
+    /// </summary>
+    private Dictionary<long, CapacidadAprobacionDto> capacidadAprobacion = new();
+
+    /// <summary>Mensaje que deja la autorización para el toast (lo arma FirmarAsync).</summary>
+    private string mensajeFirma = string.Empty;
+
+    private static string DescribirLimite(decimal? limite)
+        => limite.HasValue ? limite.Value.ToString("N2") : "sin tope";
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    protected override async Task OnInitializedAsync()
+    {
+        aprobacion = await OrdenesClient.ObtenerAprobacionConfigAsync();
+        await CargarProveedoresAsync();
+        await CargarAsync();
+    }
+
+    private OrdenCompraFilterDto BuildFilter() => new()
+    {
+        Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
+        CodProveedor = string.IsNullOrWhiteSpace(filtroProveedor) ? null : filtroProveedor,
+        Estado = estadoSeleccionado?.Codigo,
+        FechaDesde = fechaDesde.HasValue ? DateOnly.FromDateTime(fechaDesde.Value) : null,
+        FechaHasta = fechaHasta.HasValue ? DateOnly.FromDateTime(fechaHasta.Value) : null
+    };
+
+    private async Task CargarProveedoresAsync()
+    {
+        try
+        {
+            var lista = await ProveedoresClient.BuscarAsync(new ProveedorFilterDto { SoloActivos = true });
+            proveedores = lista
+                .Select(p => new ProveedorComboItem { Codigo = p.Codigo, Nombre = p.Nombre })
+                .OrderBy(p => p.Codigo)
+                .ToList();
+        }
+        catch
+        {
+            proveedores = new List<ProveedorComboItem>();
+        }
+    }
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            ordenes = await OrdenesClient.GetAsync(BuildFilter());
+
+            // Solo hay capacidad que consultar si la empresa exige autorización.
+            if (aprobacion.Encendido)
+            {
+                capacidadAprobacion = new Dictionary<long, CapacidadAprobacionDto>();
+                foreach (var fila in await OrdenesClient.ObtenerCapacidadAprobacionAsync())
+                {
+                    capacidadAprobacion[fila.DocumentoId] = fila;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudieron cargar las órdenes de compra: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnBusquedaChanged(string valor)
+    {
+        filtroBusqueda = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnProveedorChanged(string? valor)
+    {
+        filtroProveedor = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnEstadoChanged(EstadoOpcion? valor)
+    {
+        estadoSeleccionado = valor;
+        await CargarAsync();
+    }
+
+    private void Abrir(int id) => Navigation.NavigateTo($"/almacen/ordenes-compra/{id}/editar");
+
+    private void ConfirmarAprobar(OrdenCompraListItemDto item) => PedirConfirmacion(item, AccionOrden.Aprobar);
+    private void ConfirmarAnular(OrdenCompraListItemDto item)  => PedirConfirmacion(item, AccionOrden.Anular);
+    private void ConfirmarRechazar(OrdenCompraListItemDto item) => PedirConfirmacion(item, AccionOrden.Rechazar);
+    private void ConfirmarCancelar(OrdenCompraListItemDto item) => PedirConfirmacion(item, AccionOrden.Cancelar);
+    private void ConfirmarCerrar(OrdenCompraListItemDto item)   => PedirConfirmacion(item, AccionOrden.Cerrar);
+    private void ConfirmarEnviarAprobacion(OrdenCompraListItemDto item) => PedirConfirmacion(item, AccionOrden.EnviarAprobacion);
+    private void ConfirmarFirmar(OrdenCompraListItemDto item)   => PedirConfirmacion(item, AccionOrden.Firmar);
+    private void ConfirmarDevolver(OrdenCompraListItemDto item) => PedirConfirmacion(item, AccionOrden.Devolver);
+
+    /// <summary>
+    /// Firma y arma el mensaje del toast con lo que realmente pasó: no es lo mismo cerrar la
+    /// escalera que dejarla esperando al siguiente nivel.
+    /// </summary>
+    private async Task<bool> FirmarAsync(int id)
+    {
+        var resultado = await OrdenesClient.FirmarAsync(id);
+        if (resultado is null) return false;
+
+        // Una sola autorización resuelve la orden: no hay siguiente nivel que anunciar.
+        mensajeFirma = $"Orden aprobada con el nivel «{resultado.DescripcionNivel}» " +
+                       $"(límite {DescribirLimite(resultado.LimiteUtilizado)}). Se reservó el presupuesto.";
+
+        return true;
+    }
+
+    /// <summary>
+    /// Quién puede autorizar la orden, para la línea bajo el badge. <c>null</c> cuando no aplica
+    /// (no está en aprobación, o todavía no se conoce su capacidad).
+    /// <para>
+    /// Va aparte del texto del badge a propósito: metido dentro, el texto no cabía en la columna y
+    /// la píldora se cortaba.
+    /// </para>
+    /// </summary>
+    private string? NotaAprobacion(OrdenCompraListItemDto item)
+    {
+        if (item.Estado != EstadoOrdenCompra.EnAprobacion) return null;
+        if (!capacidadAprobacion.TryGetValue(item.Id, out var capacidad)) return null;
+
+        // Que NADIE alcance el monto es un estado real del documento —espera a que se configure a
+        // alguien—, así que se ve en la lista en vez de descubrirse al intentar aprobar.
+        return capacidad.HayAprobadorCapaz
+            ? $"Autoriza: {capacidad.TramoMinimo}"
+            : "Sin aprobador con límite suficiente";
+    }
+
+    private bool SinAprobador(OrdenCompraListItemDto item)
+        => item.Estado == EstadoOrdenCompra.EnAprobacion
+        && capacidadAprobacion.TryGetValue(item.Id, out var capacidad)
+        && !capacidad.HayAprobadorCapaz;
+
+    private void PedirConfirmacion(OrdenCompraListItemDto item, AccionOrden cual)
+    {
+        ordenAccion = item;
+        accion = cual;
+        motivoAccion = string.Empty;
+        confirmVisible = true;
+    }
+
+    private void CancelarAccion()
+    {
+        if (procesando) return;
+        confirmVisible = false;
+        ordenAccion = null;
+    }
+
+    private async Task EjecutarAccionAsync()
+    {
+        if (ordenAccion is null) { confirmVisible = false; return; }
+
+        var motivo = motivoAccion.Trim();
+        if (AccionExigeMotivo && string.IsNullOrWhiteSpace(motivo))
+        {
+            Toast("Validación", "Indique el motivo.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        procesando = true;
+        try
+        {
+            var ok = accion switch
+            {
+                AccionOrden.Aprobar  => await OrdenesClient.AprobarAsync(ordenAccion.Id),
+                AccionOrden.Anular   => await OrdenesClient.AnularAsync(ordenAccion.Id),
+                AccionOrden.Rechazar => await OrdenesClient.RechazarAsync(ordenAccion.Id, motivo),
+                AccionOrden.Cancelar => await OrdenesClient.CancelarAsync(ordenAccion.Id, motivo),
+                AccionOrden.EnviarAprobacion => await OrdenesClient.EnviarAAprobacionAsync(ordenAccion.Id),
+                AccionOrden.Devolver => await OrdenesClient.DevolverAsync(ordenAccion.Id, motivo),
+                AccionOrden.Firmar   => await FirmarAsync(ordenAccion.Id),
+                _                    => await OrdenesClient.CerrarAsync(ordenAccion.Id, motivo)
+            };
+
+            if (!ok)
+            {
+                Toast("Error", "La orden ya no existe.", ToastRenderStyle.Danger);
+            }
+            else
+            {
+                Toast("Éxito", accion switch
+                {
+                    AccionOrden.Aprobar  => "Orden aprobada.",
+                    AccionOrden.Anular   => "Orden anulada.",
+                    AccionOrden.Rechazar => "Orden rechazada.",
+                    AccionOrden.Cancelar => "Orden cancelada. Se liberó el presupuesto pendiente.",
+                    AccionOrden.EnviarAprobacion => "Orden enviada a aprobación.",
+                    AccionOrden.Devolver => "Orden devuelta a borrador. Se borraron las firmas.",
+                    AccionOrden.Firmar   => mensajeFirma,
+                    _                    => "Orden cerrada. Se liberó el presupuesto pendiente."
+                }, ToastRenderStyle.Success);
+                await CargarAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            procesando = false;
+            confirmVisible = false;
+            ordenAccion = null;
+        }
+    }
+
+    /// <summary>
+    /// La entrega pactada ya pasó y la orden sigue pendiente de recibir. Cerrada o anulada no
+    /// se marcan: ahí la fecha ya no exige nada.
+    /// </summary>
+    private static bool EntregaVencida(OrdenCompraListItemDto item)
+        => item.FechaEntregaPactada.HasValue
+        && item.FechaEntregaPactada.Value < DateOnly.FromDateTime(DateTime.Today)
+        && item.Estado is EstadoOrdenCompra.Aprobada or EstadoOrdenCompra.RecibidaParcial;
+
+    private static string ClaseEstado(short estado) => estado switch
+    {
+        EstadoOrdenCompra.Borrador        => "estado-borrador",
+        EstadoOrdenCompra.Aprobada        => "estado-aprobada",
+        EstadoOrdenCompra.RecibidaParcial => "estado-parcial",
+        EstadoOrdenCompra.Cerrada         => "estado-cerrada",
+        EstadoOrdenCompra.EnAprobacion    => "estado-aprobacion",
+        EstadoOrdenCompra.Rechazada       => "estado-anulada",
+        EstadoOrdenCompra.Cancelada       => "estado-anulada",
+        EstadoOrdenCompra.Anulada         => "estado-anulada",
+        _ => "estado-borrador"
+    };
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = text,
+            RenderStyle = style,
+            ProviderName = "OrdenesCompraToast"
+        });
+}
