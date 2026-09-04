@@ -1913,33 +1913,29 @@ public sealed class ReportTemplateFactory
 
         var cuentaLabel = new XRLabel
         {
-            BoundsF = new RectangleF(0f, 6f, contentWidth - amountWidth * 2, 15f),
+            // Termina donde empieza el saldo anterior, para no pisarlo.
+            BoundsF = new RectangleF(0f, 6f, contentWidth - amountWidth * 3f, 15f),
             Font = new DXFont("Arial", 9.5f, DXFontStyle.Bold),
             TextAlignment = TextAlignment.MiddleLeft
         };
         cuentaLabel.ExpressionBindings.Add(new ExpressionBinding(
             "BeforePrint", "Text", "[cuenta_codigo] + '  ' + [cuenta_nombre]"));
 
-        var saldoAnteriorRotulo = new XRLabel
-        {
-            // Ancho y medio: con uno solo el rotulo sale cortado ("Saldo anterio").
-            BoundsF = new RectangleF(contentWidth - amountWidth * 2.5f, 6f, amountWidth * 1.5f, 15f),
-            Font = new DXFont("Arial", 8.5f),
-            Text = "Saldo anterior",
-            TextAlignment = TextAlignment.MiddleRight,
-        };
-
+        // Rotulo y cifra en UN solo control. En dos, el rotulo salia cortado ("Saldo anterio")
+        // por mucho que se le diera ancho: la etiqueta alineada a la derecha junto a otra pegada
+        // a su borde termina recortandose. Con la expresion completa el problema desaparece.
         var saldoAnterior = new XRLabel
         {
-            BoundsF = new RectangleF(contentWidth - amountWidth, 6f, amountWidth, 15f),
+            BoundsF = new RectangleF(contentWidth - amountWidth * 3f, 6f, amountWidth * 3f, 15f),
             Font = new DXFont("Arial", 9f, DXFontStyle.Bold),
             TextAlignment = TextAlignment.MiddleRight,
             Padding = new PaddingInfo(0, 6, 0, 0),
-            TextFormatString = EstadoFinancieroLayout.FormatoMonto,
+            WordWrap = false,
         };
-        saldoAnterior.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[saldo_anterior]"));
+        saldoAnterior.ExpressionBindings.Add(new ExpressionBinding(
+            "BeforePrint", "Text", "'Saldo anterior   ' + FormatString('{0:#,##0;(#,##0);-}', [saldo_anterior])"));
 
-        groupHeader.Controls.AddRange([cuentaLabel, saldoAnteriorRotulo, saldoAnterior]);
+        groupHeader.Controls.AddRange([cuentaLabel, saldoAnterior]);
 
         var detailBand = new DetailBand { HeightF = 15f };
         var detailTable = new XRTable

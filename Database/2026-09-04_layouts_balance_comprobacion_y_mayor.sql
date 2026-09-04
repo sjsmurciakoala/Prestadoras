@@ -283,63 +283,62 @@ SELECT i.company_id,
         <Item1 Ref="44" FieldName="cuenta_codigo" />
       </GroupFields>
       <Controls>
-        <Item1 Ref="45" ControlType="XRLabel" TextAlignment="MiddleLeft" SizeF="770,15" LocationFloat="0,6" Font="Arial, 9.5pt, style=Bold">
+        <Item1 Ref="45" ControlType="XRLabel" TextAlignment="MiddleLeft" SizeF="665,15" LocationFloat="0,6" Font="Arial, 9.5pt, style=Bold">
           <ExpressionBindings>
             <Item1 Ref="46" EventName="BeforePrint" PropertyName="Text" Expression="[cuenta_codigo] + ''  '' + [cuenta_nombre]" />
           </ExpressionBindings>
         </Item1>
-        <Item2 Ref="47" ControlType="XRLabel" Text="Saldo anterior" TextAlignment="MiddleRight" SizeF="157.5,15" LocationFloat="717.5,6" Font="Arial, 8.5pt" />
-        <Item3 Ref="48" ControlType="XRLabel" TextFormatString="{0:#,##0;(#,##0);-}" TextAlignment="MiddleRight" SizeF="105,15" LocationFloat="875,6" Font="Arial, 9pt, style=Bold" Padding="0,6,0,0,100">
+        <Item2 Ref="47" ControlType="XRLabel" TextAlignment="MiddleRight" WordWrap="false" SizeF="315,15" LocationFloat="665,6" Font="Arial, 9pt, style=Bold" Padding="0,6,0,0,100">
           <ExpressionBindings>
-            <Item1 Ref="49" EventName="BeforePrint" PropertyName="Text" Expression="[saldo_anterior]" />
+            <Item1 Ref="48" EventName="BeforePrint" PropertyName="Text" Expression="''Saldo anterior   '' + FormatString(''{0:#,##0;(#,##0);-}'', [saldo_anterior])" />
           </ExpressionBindings>
-        </Item3>
+        </Item2>
       </Controls>
     </Item5>
-    <Item6 Ref="50" ControlType="DetailBand" HeightF="15">
+    <Item6 Ref="49" ControlType="DetailBand" HeightF="15">
       <Controls>
-        <Item1 Ref="51" ControlType="XRTable" SizeF="980,13" LocationFloat="0,2" Font="Arial, 8.5pt" Borders="None" BorderWidth="0">
+        <Item1 Ref="50" ControlType="XRTable" SizeF="980,13" LocationFloat="0,2" Font="Arial, 8.5pt" Borders="None" BorderWidth="0">
           <Rows>
-            <Item1 Ref="52" ControlType="XRTableRow" Weight="1.7692307692307692">
+            <Item1 Ref="51" ControlType="XRTableRow" Weight="1.7692307692307692">
               <Cells>
-                <Item1 Ref="53" ControlType="XRTableCell" Weight="70" TextFormatString="{0:dd/MM/yyyy}" TextAlignment="MiddleLeft" Padding="0,8,0,0,96" Borders="None">
+                <Item1 Ref="52" ControlType="XRTableCell" Weight="70" TextFormatString="{0:dd/MM/yyyy}" TextAlignment="MiddleLeft" Padding="0,8,0,0,96" Borders="None">
                   <ExpressionBindings>
-                    <Item1 Ref="54" EventName="BeforePrint" PropertyName="Text" Expression="[fecha]" />
+                    <Item1 Ref="53" EventName="BeforePrint" PropertyName="Text" Expression="[fecha]" />
                   </ExpressionBindings>
                 </Item1>
-                <Item2 Ref="55" ControlType="XRTableCell" Weight="80" TextAlignment="MiddleLeft" Padding="0,8,0,0,96" Borders="None">
+                <Item2 Ref="54" ControlType="XRTableCell" Weight="80" TextAlignment="MiddleLeft" Padding="0,8,0,0,96" Borders="None">
                   <ExpressionBindings>
-                    <Item1 Ref="56" EventName="BeforePrint" PropertyName="Text" Expression="[poliza_number]" />
+                    <Item1 Ref="55" EventName="BeforePrint" PropertyName="Text" Expression="[poliza_number]" />
                   </ExpressionBindings>
                 </Item2>
-                <Item3 Ref="57" ControlType="XRTableCell" Weight="95" TextAlignment="MiddleLeft" Padding="0,8,0,0,96" Borders="None">
+                <Item3 Ref="56" ControlType="XRTableCell" Weight="95" TextAlignment="MiddleLeft" Padding="0,8,0,0,96" Borders="None">
                   <ExpressionBindings>
-                    <Item1 Ref="58" EventName="BeforePrint" PropertyName="Text" Expression="[documento]" />
+                    <Item1 Ref="57" EventName="BeforePrint" PropertyName="Text" Expression="[documento]" />
                   </ExpressionBindings>
                 </Item3>
-                <Item4 Ref="59" ControlType="XRTableCell" Weight="100" TextAlignment="MiddleLeft" Padding="0,8,0,0,96" Borders="None">
+                <Item4 Ref="58" ControlType="XRTableCell" Weight="100" TextAlignment="MiddleLeft" Padding="0,8,0,0,96" Borders="None">
                   <ExpressionBindings>
-                    <Item1 Ref="60" EventName="BeforePrint" PropertyName="Text" Expression="[tipo_transaccion]" />
+                    <Item1 Ref="59" EventName="BeforePrint" PropertyName="Text" Expression="[tipo_transaccion]" />
                   </ExpressionBindings>
                 </Item4>
-                <Item5 Ref="61" ControlType="XRTableCell" Weight="320" TextAlignment="MiddleLeft" Padding="0,8,0,0,96" Borders="None">
+                <Item5 Ref="60" ControlType="XRTableCell" Weight="320" TextAlignment="MiddleLeft" Padding="0,8,0,0,96" Borders="None">
                   <ExpressionBindings>
-                    <Item1 Ref="62" EventName="BeforePrint" PropertyName="Text" Expression="[descripcion]" />
+                    <Item1 Ref="61" EventName="BeforePrint" PropertyName="Text" Expression="[descripcion]" />
                   </ExpressionBindings>
                 </Item5>
-                <Item6 Ref="63" ControlType="XRTableCell" Weight="105" TextFormatString="{0:#,##0;(#,##0);-}" TextAlignment="MiddleRight" Padding="0,6,0,0,96" Borders="None">
+                <Item6 Ref="62" ControlType="XRTableCell" Weight="105" TextFormatString="{0:#,##0;(#,##0);-}" TextAlignment="MiddleRight" Padding="0,6,0,0,96" Borders="None">
                   <ExpressionBindings>
-                    <Item1 Ref="64" EventName="BeforePrint" PropertyName="Text" Expression="[debe]" />
+                    <Item1 Ref="63" EventName="BeforePrint" PropertyName="Text" Expression="[debe]" />
                   </ExpressionBindings>
                 </Item6>
-                <Item7 Ref="65" ControlType="XRTableCell" Weight="105" TextFormatString="{0:#,##0;(#,##0);-}" TextAlignment="MiddleRight" Padding="0,6,0,0,96" Borders="None">
+                <Item7 Ref="64" ControlType="XRTableCell" Weight="105" TextFormatString="{0:#,##0;(#,##0);-}" TextAlignment="MiddleRight" Padding="0,6,0,0,96" Borders="None">
                   <ExpressionBindings>
-                    <Item1 Ref="66" EventName="BeforePrint" PropertyName="Text" Expression="[haber]" />
+                    <Item1 Ref="65" EventName="BeforePrint" PropertyName="Text" Expression="[haber]" />
                   </ExpressionBindings>
                 </Item7>
-                <Item8 Ref="67" ControlType="XRTableCell" Weight="105" TextFormatString="{0:#,##0;(#,##0);-}" TextAlignment="MiddleRight" Padding="0,6,0,0,96" Borders="None">
+                <Item8 Ref="66" ControlType="XRTableCell" Weight="105" TextFormatString="{0:#,##0;(#,##0);-}" TextAlignment="MiddleRight" Padding="0,6,0,0,96" Borders="None">
                   <ExpressionBindings>
-                    <Item1 Ref="68" EventName="BeforePrint" PropertyName="Text" Expression="[saldo_corriente]" />
+                    <Item1 Ref="67" EventName="BeforePrint" PropertyName="Text" Expression="[saldo_corriente]" />
                   </ExpressionBindings>
                 </Item8>
               </Cells>
@@ -348,28 +347,28 @@ SELECT i.company_id,
         </Item1>
       </Controls>
     </Item6>
-    <Item7 Ref="69" ControlType="GroupFooterBand" HeightF="20">
+    <Item7 Ref="68" ControlType="GroupFooterBand" HeightF="20">
       <Controls>
-        <Item1 Ref="70" ControlType="XRLine" SizeF="210,2" LocationFloat="665,0" ForeColor="255,70,70,70">
+        <Item1 Ref="69" ControlType="XRLine" SizeF="210,2" LocationFloat="665,0" ForeColor="255,70,70,70">
           <ExpressionBindings>
-            <Item1 Ref="71" EventName="BeforePrint" PropertyName="Visible" Expression="true" />
+            <Item1 Ref="70" EventName="BeforePrint" PropertyName="Visible" Expression="true" />
           </ExpressionBindings>
         </Item1>
-        <Item2 Ref="72" ControlType="XRLabel" TextAlignment="MiddleLeft" SizeF="665,15" LocationFloat="0,3" Font="Arial, 9pt, style=Bold" Padding="8,0,0,0,100">
+        <Item2 Ref="71" ControlType="XRLabel" TextAlignment="MiddleLeft" SizeF="665,15" LocationFloat="0,3" Font="Arial, 9pt, style=Bold" Padding="8,0,0,0,100">
           <ExpressionBindings>
-            <Item1 Ref="73" EventName="BeforePrint" PropertyName="Text" Expression="''Suman los movimientos de '' + [cuenta_codigo]" />
+            <Item1 Ref="72" EventName="BeforePrint" PropertyName="Text" Expression="''Suman los movimientos de '' + [cuenta_codigo]" />
           </ExpressionBindings>
         </Item2>
-        <Item3 Ref="74" ControlType="XRLabel" TextFormatString="{0:#,##0;(#,##0);-}" TextAlignment="MiddleRight" SizeF="105,15" LocationFloat="665,3" Font="Arial, 9pt, style=Bold" Padding="0,6,0,0,100">
-          <Summary Ref="75" Running="Group" IgnoreNullValues="true" />
+        <Item3 Ref="73" ControlType="XRLabel" TextFormatString="{0:#,##0;(#,##0);-}" TextAlignment="MiddleRight" SizeF="105,15" LocationFloat="665,3" Font="Arial, 9pt, style=Bold" Padding="0,6,0,0,100">
+          <Summary Ref="74" Running="Group" IgnoreNullValues="true" />
           <ExpressionBindings>
-            <Item1 Ref="76" EventName="BeforePrint" PropertyName="Text" Expression="sumSum([debe])" />
+            <Item1 Ref="75" EventName="BeforePrint" PropertyName="Text" Expression="sumSum([debe])" />
           </ExpressionBindings>
         </Item3>
-        <Item4 Ref="77" ControlType="XRLabel" TextFormatString="{0:#,##0;(#,##0);-}" TextAlignment="MiddleRight" SizeF="105,15" LocationFloat="770,3" Font="Arial, 9pt, style=Bold" Padding="0,6,0,0,100">
-          <Summary Ref="78" Running="Group" IgnoreNullValues="true" />
+        <Item4 Ref="76" ControlType="XRLabel" TextFormatString="{0:#,##0;(#,##0);-}" TextAlignment="MiddleRight" SizeF="105,15" LocationFloat="770,3" Font="Arial, 9pt, style=Bold" Padding="0,6,0,0,100">
+          <Summary Ref="77" Running="Group" IgnoreNullValues="true" />
           <ExpressionBindings>
-            <Item1 Ref="79" EventName="BeforePrint" PropertyName="Text" Expression="sumSum([haber])" />
+            <Item1 Ref="78" EventName="BeforePrint" PropertyName="Text" Expression="sumSum([haber])" />
           </ExpressionBindings>
         </Item4>
       </Controls>
