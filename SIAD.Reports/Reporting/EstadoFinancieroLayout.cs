@@ -130,15 +130,31 @@ internal static class EstadoFinancieroLayout
     /// Las tres primeras líneas salen del dataset y no de parámetros, para que el encabezado
     /// diga lo mismo que los datos que se están imprimiendo.
     /// </summary>
-    public static ReportHeaderBand CrearEncabezado(string titulo, string leyendaMoneda = "(Expresado en lempiras)")
+    public static ReportHeaderBand CrearEncabezado(
+        string titulo,
+        string leyendaMoneda = "(Expresado en lempiras)",
+        cfg_company? empresa = null)
     {
         var banda = new ReportHeaderBand { HeightF = 104f };
 
+        // Con empresa se escriben los textos; sin ella se enlazan al dataset. No todos los
+        // informes devuelven los datos de la empresa en cada fila —el mayor analitico, por
+        // ejemplo, solo trae cuentas y movimientos— y entonces el encabezado saldria mudo.
+        var nombre = empresa is null
+            ? LineaTitulo("[empresa_nombre]", 0f, 11f, DXFontStyle.Bold)
+            : LineaTituloFija((empresa.commercial_name ?? string.Empty).Trim(), 0f, 11f);
+        var razon = empresa is null
+            ? LineaTitulo("[empresa_nombre_legal]", 15f, 11f, DXFontStyle.Bold)
+            : LineaTituloFija((empresa.legal_name ?? string.Empty).Trim(), 15f, 11f);
+        var plaza = empresa is null
+            ? LineaTitulo("[empresa_direccion]", 30f, 11f, DXFontStyle.Bold)
+            : LineaTituloFija((empresa.address ?? string.Empty).Trim(), 30f, 11f);
+
         banda.Controls.AddRange(
         [
-            LineaTitulo("[empresa_nombre]", 0f, 11f, DXFontStyle.Bold),
-            LineaTitulo("[empresa_nombre_legal]", 15f, 11f, DXFontStyle.Bold),
-            LineaTitulo("[empresa_direccion]", 30f, 11f, DXFontStyle.Bold),
+            nombre,
+            razon,
+            plaza,
             new XRLabel
             {
                 BoundsF = new RectangleF(0f, 45f, AnchoContenido, 15f),
@@ -447,6 +463,15 @@ internal static class EstadoFinancieroLayout
     // -------------------------------------------------------------------------
     // Utilidades
     // -------------------------------------------------------------------------
+
+    private static XRLabel LineaTituloFija(string texto, float y, float tamano)
+        => new()
+        {
+            BoundsF = new RectangleF(0f, y, AnchoContenido, 15f),
+            Font = new DXFont("Arial", tamano, DXFontStyle.Bold),
+            Text = texto,
+            TextAlignment = TextAlignment.MiddleCenter,
+        };
 
     private static XRLabel LineaTitulo(string expresion, float y, float tamano, DXFontStyle estilo)
     {

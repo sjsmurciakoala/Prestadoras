@@ -111,8 +111,9 @@ public sealed class EstadoFinancieroLayoutTests : IntegrationTestBase
         Directory.CreateDirectory(carpeta);
         report.ExportToPdf(Path.Combine(carpeta, nombreArchivo));
 
-        // Ademas del PDF, una imagen por pagina: es lo que permite comparar el diseno a ojo sin
-        // depender de un visor.
+        // Ademas del PDF, una imagen de la PRIMERA pagina: es lo que permite comparar el diseno a
+        // ojo sin depender de un visor. Solo la primera a proposito: un mayor analitico de un
+        // ejercicio completo pasa de las cien hojas y exportarlas todas agota la memoria.
         report.ExportToImage(
             Path.Combine(carpeta, Path.ChangeExtension(nombreArchivo, ".png")),
             new DevExpress.XtraPrinting.ImageExportOptions
@@ -120,6 +121,7 @@ public sealed class EstadoFinancieroLayoutTests : IntegrationTestBase
                 Format = DevExpress.Drawing.DXImageFormat.Png,
                 Resolution = 110,
                 ExportMode = DevExpress.XtraPrinting.ImageExportMode.SingleFilePageByPage,
+                PageRange = "1",
                 PageBorderWidth = 0,
             });
     }
@@ -297,6 +299,8 @@ public sealed class EstadoFinancieroLayoutTests : IntegrationTestBase
             ("estado-resultados", "Estado de resultados"),
             ("estado-flujo-efectivo", "Estado de flujos de efectivo"),
             ("estado-cambios-patrimonio", "Estado de cambios en el patrimonio"),
+            ("balance-comprobacion", "Balance de comprobacion"),
+            ("mayor-analitico", "Mayor analitico"),
         };
 
         foreach (var (codigo, nombre) in estados)
@@ -307,6 +311,70 @@ public sealed class EstadoFinancieroLayoutTests : IntegrationTestBase
 
             File.WriteAllBytes(Path.Combine(carpeta!, codigo + ".xml"), memoria.ToArray());
         }
+    }
+
+    [SkippableFact]
+    public void El_balance_de_comprobacion_resalta_las_cuentas_mayores()
+    {
+        using var report = ConstruirReporte("balance-comprobacion", "Balance de comprobacion");
+
+        var textos = new List<string>();
+        var expresiones = new List<string>();
+
+        foreach (Band banda in report.Bands)
+        {
+            foreach (var control in TodosLosControles(banda))
+            {
+                if (control is XRLabel etiqueta)
+                {
+                    textos.Add(etiqueta.Text ?? string.Empty);
+                }
+
+                foreach (ExpressionBinding enlace in control.ExpressionBindings)
+                {
+                    expresiones.Add($"{enlace.PropertyName}={enlace.Expression}");
+                }
+            }
+        }
+
+        Assert.Contains(textos, t => t.Contains("BALANCE DE COMPROBACION", StringComparison.Ordinal));
+        Assert.Contains(textos, t => t.Contains("SALDO ANTERIOR", StringComparison.Ordinal));
+
+        // Las cuentas mayores van en negrita, y la senal es tener cuentas colgando -no un nivel
+        // fijo-, porque cada empresa arma su plan con la profundidad que quiere.
+        Assert.Contains(expresiones,
+            e => e.StartsWith("Font.Bold=", StringComparison.Ordinal)
+                 && e.Contains("tiene_hijos", StringComparison.Ordinal));
+
+        GuardarPdfSiSePide(report, "balance-comprobacion.pdf");
+    }
+
+    [SkippableFact]
+    public void El_mayor_analitico_agrupa_por_cuenta()
+    {
+        using var report = ConstruirReporte("mayor-analitico", "Mayor analitico");
+
+        var agrupaPorCuenta = false;
+        foreach (Band banda in report.Bands)
+        {
+            if (banda is not GroupHeaderBand grupo)
+            {
+                continue;
+            }
+
+            foreach (GroupField campo in grupo.GroupFields)
+            {
+                if (campo.FieldName == "cuenta_codigo")
+                {
+                    agrupaPorCuenta = true;
+                }
+            }
+        }
+
+        Assert.True(agrupaPorCuenta,
+            "El mayor agrupa por cuenta: el saldo corriente solo significa algo dentro de ella.");
+
+        GuardarPdfSiSePide(report, "mayor-analitico.pdf");
     }
 
     [SkippableFact]
