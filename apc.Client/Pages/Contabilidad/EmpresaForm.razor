@@ -156,6 +156,12 @@ else
                                    NullText="https://www.empresa.com" />
                         <ValidationMessage For="() => empresa.PaginaWeb" />
                     </DxFormLayoutItem>
+                    @* Firma que se imprime en el pagaré y el compromiso de pago. *@
+                    <DxFormLayoutItem Caption="Firma por cobranza" ColSpanMd="12">
+                        <DxTextBox @bind-Text="empresa.FirmanteCobranza"
+                                   NullText="Nombre de quien firma el pagaré y el convenio; vacío imprime el rótulo genérico" />
+                        <ValidationMessage For="() => empresa.FirmanteCobranza" />
+                    </DxFormLayoutItem>
                 </DxFormLayoutGroup>
 
                 @if (EmpresaId.HasValue)

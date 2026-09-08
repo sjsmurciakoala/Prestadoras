@@ -50,6 +50,13 @@ public sealed class CompanyCreationDto
     [StringLength(120, ErrorMessage = "Los teléfonos no pueden superar los 120 caracteres.")]
     public string? Telefonos { get; set; }
 
+    /// <summary>
+    /// Quién firma por la unidad de cobranza en el pagaré y el compromiso de
+    /// pago. Vacío deja el rótulo genérico de esos documentos.
+    /// </summary>
+    [StringLength(120, ErrorMessage = "El firmante de cobranza no puede superar los 120 caracteres.")]
+    public string? FirmanteCobranza { get; set; }
+
     [Required(ErrorMessage = "El país es obligatorio.")]
     [StringLength(120, ErrorMessage = "El país no puede superar los 120 caracteres.")]
     public string Pais { get; set; } = string.Empty;

@@ -95,6 +95,7 @@ public sealed class CompanyManagementService : ICompanyManagementService
                 contacto = Limpiar(dto.Contacto),
                 direccion = Limpiar(dto.Direccion),
                 telefonos = Limpiar(dto.Telefonos),
+                firmante_cobranza = Limpiar(dto.FirmanteCobranza),
                 pais = Limpiar(dto.Pais),
                 email = Limpiar(dto.Email),
                 pagina_web = Limpiar(dto.PaginaWeb),
@@ -316,6 +317,7 @@ public sealed class CompanyManagementService : ICompanyManagementService
             configuracion.contacto = Limpiar(dto.Contacto);
             configuracion.direccion = Limpiar(dto.Direccion);
             configuracion.telefonos = Limpiar(dto.Telefonos);
+            configuracion.firmante_cobranza = Limpiar(dto.FirmanteCobranza);
             configuracion.pais = Limpiar(dto.Pais);
             configuracion.email = Limpiar(dto.Email);
             configuracion.pagina_web = Limpiar(dto.PaginaWeb);
@@ -357,6 +359,7 @@ public sealed class CompanyManagementService : ICompanyManagementService
             Contacto = configuracion.contacto,
             Direccion = configuracion.direccion ?? string.Empty,
             Telefonos = configuracion.telefonos,
+            FirmanteCobranza = configuracion.firmante_cobranza,
             Pais = configuracion.pais ?? company.country_code,
             Email = configuracion.email ?? company.email,
             PaginaWeb = configuracion.pagina_web

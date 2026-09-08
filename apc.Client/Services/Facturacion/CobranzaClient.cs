@@ -159,6 +159,10 @@ public class CobranzaClient
     public static string ConvenioPdfUrl(int planId)
         => $"api/cobranza/planes/{planId}/pdf";
 
+    /// <summary>URL del PDF del pagaré que respalda el convenio.</summary>
+    public static string PagarePdfUrl(int planId)
+        => $"api/cobranza/planes/{planId}/pagare";
+
     public async Task<int?> RegenerarDocumentoAccionAsync(int accionId, CancellationToken ct = default)
     {
         var response = await _http.PostAsync($"api/cobranza/acciones/{accionId}/documento", content: null, ct);

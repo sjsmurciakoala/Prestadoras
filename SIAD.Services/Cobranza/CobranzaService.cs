@@ -637,10 +637,65 @@ public class CobranzaService : ICobranzaService
             })
             .ToList();
 
+        // Desglose de la deuda por concepto facturado ("Agua Potable",
+        // "Alcantarillado Sanitario"...): sale de las líneas que el convenio
+        // compensó al crearse.
+        var conexion = _context.Database.GetDbConnection();
+        var conceptosRaw = await conexion.QueryAsync<ConceptoRow>(new CommandDefinition(@"
+            SELECT COALESCE(NULLIF(btrim(fd.descripcion), ''), 'Otros conceptos') AS descripcion,
+                   SUM(t.monto_trasladado)                                        AS valor
+              FROM public.cln_plan_pago_traslado t
+              JOIN public.factura_detalle fd ON fd.id = t.factura_detalle_id
+             WHERE t.plan_id = @PlanId AND t.company_id = @CompanyId
+             GROUP BY 1
+             ORDER BY 2 DESC;",
+            new { PlanId = hdr.id, CompanyId = companyId },
+            cancellationToken: ct));
+
+        var conceptos = new List<ConvenioConceptoDto>();
+        foreach (var fila in conceptosRaw)
+        {
+            conceptos.Add(new ConvenioConceptoDto { Descripcion = fila.descripcion, Valor = fila.valor });
+        }
+
+        var fechaConvenio = hdr.fecha ?? hdr.fechacreacion;
+        var valorCuota = cuotas.Count > 0 ? cuotas[0].Monto : 0m;
+
+        // Quién firma por la unidad de cobranza; vacío deja el rótulo genérico
+        // en el pagaré y en el compromiso de pago.
+        var firmanteCobranza = await _context.Database
+            .SqlQueryRaw<string>(
+                "SELECT COALESCE(firmante_cobranza, '') AS \"Value\" FROM public.con_empresa_configuracion WHERE company_id = {0}",
+                companyId)
+            .FirstOrDefaultAsync(ct);
+
+        // Los documentos que firma el cliente llevan el nombre comercial, no la
+        // razón social.
+        var nombreComercial = await _context.Database
+            .SqlQueryRaw<string>(
+                "SELECT COALESCE(NULLIF(commercial_name, ''), legal_name, '') AS \"Value\" FROM public.cfg_company WHERE company_id = {0}",
+                companyId)
+            .FirstOrDefaultAsync(ct);
+
+        // Cuando el convenio no registró representante firma el titular, así que
+        // la identidad es la de su ficha de cliente.
+        var identidad = hdr.docrepresentante?.Trim();
+        if (string.IsNullOrWhiteSpace(identidad))
+        {
+            identidad = await _context.Database
+                .SqlQueryRaw<string>(
+                    "SELECT COALESCE(maestro_cliente_identidad, '') AS \"Value\" FROM public.cliente_maestro WHERE maestro_cliente_clave = {0} AND company_id = {1}",
+                    cliente?.maestro_cliente_clave ?? string.Empty, companyId)
+                .FirstOrDefaultAsync(ct);
+        }
+
         return new ConvenioImpresionDto
         {
             PlanId = hdr.id,
             Correlativo = hdr.correlativo,
+            Codigo = string.IsNullOrWhiteSpace(hdr.correlativo)
+                ? string.Empty
+                : $"{hdr.correlativo.Trim().PadLeft(7, '0')}-{(fechaConvenio ?? DateTime.Today):yyyy}",
             EstadoTexto = hdr.estado_id switch
             {
                 EstadoPlan.Activo => "ACTIVO",
@@ -654,17 +709,97 @@ public class CobranzaService : ICobranzaService
             ClienteNombre = cliente?.maestro_cliente_nombre ?? string.Empty,
             ClienteDireccion = hdr.direccion,
             Representante = hdr.representante,
-            DocRepresentante = hdr.docrepresentante,
+            DocRepresentante = identidad,
             MontoTotal = hdr.monto ?? 0m,
             Prima = hdr.vprima ?? 0m,
             MontoFinanciado = hdr.montofinanc ?? 0m,
+            Tasa = 0m,                                   // el convenio no cobra intereses
             Meses = hdr.meses ?? cuotas.Count,
+            ValorCuota = valorCuota,
             Comentario = hdr.comentario,
-            EmpresaNombre = empresa?.legal_name ?? empresa?.commercial_name,
+            EmpresaNombre = string.IsNullOrWhiteSpace(nombreComercial)
+                ? empresa?.commercial_name ?? empresa?.legal_name
+                : nombreComercial,
             EmpresaRtn = empresa?.tax_id,
             EmpresaDireccion = empresa?.address,
+            Conceptos = conceptos,
             Cuotas = cuotas,
-            SaldoPendiente = cuotas.Where(c => c.EstadoTexto is "PENDIENTE" or "ABONO PARCIAL").Sum(c => c.Saldo)
+            SaldoPendiente = cuotas.Where(c => c.EstadoTexto is "PENDIENTE" or "ABONO PARCIAL").Sum(c => c.Saldo),
+            FirmanteCobranza = firmanteCobranza,
+            ElaboradoPor = hdr.usuariocreacion,
+            FechaElaboracion = hdr.fechacreacion
+        };
+    }
+
+    /// <summary>Fila del desglose de conceptos del convenio.</summary>
+    private sealed class ConceptoRow
+    {
+        public string descripcion { get; set; } = string.Empty;
+        public decimal valor { get; set; }
+    }
+
+    /// <summary>
+    /// Datos del pagaré que respalda el convenio: mismo plan que el documento
+    /// comercial, pero visto como título valor por el monto financiado. Null si
+    /// el plan no existe.
+    /// </summary>
+    public async Task<PagareImpresionDto?> ObtenerPagareImpresionAsync(int planId, CancellationToken ct = default)
+    {
+        var convenio = await ObtenerConvenioImpresionAsync(planId, ct);
+        if (convenio is null)
+        {
+            return null;
+        }
+
+        DateTime? primerVencimiento = null;
+        DateTime? ultimoVencimiento = null;
+        decimal sumaCuotas = 0m;
+
+        foreach (var cuota in convenio.Cuotas)
+        {
+            sumaCuotas += cuota.Monto;
+
+            if (cuota.FechaVencimiento is not { } vence)
+            {
+                continue;
+            }
+
+            if (primerVencimiento is null || vence < primerVencimiento)
+            {
+                primerVencimiento = vence;
+            }
+
+            if (ultimoVencimiento is null || vence > ultimoVencimiento)
+            {
+                ultimoVencimiento = vence;
+            }
+        }
+
+        // El pagaré ampara lo financiado; si el encabezado no lo trae, la suma
+        // de las cuotas es la misma obligación.
+        var monto = convenio.MontoFinanciado > 0m ? convenio.MontoFinanciado : sumaCuotas;
+
+        var fecha = convenio.FechaCreacion ?? DateTime.Today;
+        var correlativo = convenio.Correlativo?.Trim();
+
+        return new PagareImpresionDto
+        {
+            PlanId = convenio.PlanId,
+            Correlativo = correlativo,
+            FechaSuscripcion = fecha,
+            DeudorNombre = string.IsNullOrWhiteSpace(convenio.Representante)
+                ? convenio.ClienteNombre
+                : convenio.Representante!,
+            // El convenio ya resolvió la identidad (la del representante o, si no
+            // lo hay, la del titular) y el nombre comercial de la empresa.
+            DeudorIdentidad = convenio.DocRepresentante,
+            NumeroCuenta = convenio.ClienteClave,
+            EmpresaNombre = convenio.EmpresaNombre,
+            FirmanteCobranza = convenio.FirmanteCobranza,
+            MontoTotal = monto,
+            CantidadMeses = convenio.Cuotas.Count > 0 ? convenio.Cuotas.Count : convenio.Meses,
+            FechaDesde = primerVencimiento ?? convenio.FechaPrimerPago,
+            FechaHasta = ultimoVencimiento
         };
     }
 

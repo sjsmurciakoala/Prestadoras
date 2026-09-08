@@ -12,7 +12,9 @@
     <BodyTemplate>
         @if (!string.IsNullOrWhiteSpace(_url))
         {
-            <iframe class="pdf-frame" src="@_url" title="@_titulo"></iframe>
+            @* La clave por URL fuerza a rehacer el iframe: al reusarlo para un
+               segundo documento, el visor del navegador se queda en blanco. *@
+            <iframe @key="_url" class="pdf-frame" src="@_url" title="@_titulo"></iframe>
         }
     </BodyTemplate>
 </DxPopup>

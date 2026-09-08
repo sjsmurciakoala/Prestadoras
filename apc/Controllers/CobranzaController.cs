@@ -181,6 +181,25 @@ public class CobranzaController : ControllerBase
         return File(stream.ToArray(), "application/pdf");
     }
 
+    /// <summary>PDF del pagaré que respalda el convenio (título valor por el monto financiado).</summary>
+    [HttpGet("planes/{planId:int}/pagare")]
+    public async Task<IActionResult> PagarePdf(int planId, CancellationToken ct)
+    {
+        var pagare = await _service.ObtenerPagareImpresionAsync(planId, ct);
+        if (pagare is null)
+            return NotFound(new { mensaje = "No se encontró el convenio." });
+
+        using var report = new Rpt_Dev_Pagare(pagare);
+        report.RequestParameters = false;
+
+        using var stream = new System.IO.MemoryStream();
+        report.ExportToPdf(stream);
+
+        Response.Headers.ContentDisposition =
+            $"inline; filename=Pagare-{pagare.Correlativo ?? pagare.PlanId.ToString()}.pdf";
+        return File(stream.ToArray(), "application/pdf");
+    }
+
     [HttpGet("planes/{correlativo}")]
 
     public async Task<IActionResult> ObtenerPlan(string correlativo, CancellationToken ct)

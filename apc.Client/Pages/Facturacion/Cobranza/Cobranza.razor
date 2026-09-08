@@ -256,7 +256,7 @@
                                         </CellDisplayTemplate>
                                     </DxGridDataColumn>
                                     <DxGridDataColumn FieldName="@nameof(CobranzaPlanResumenDto.Total)" Caption="Total" DisplayFormat="n2" Width="120px" />
-                                    <DxGridDataColumn Caption="Acciones" Width="220px" TextAlignment="GridTextAlignment.Center">
+                                    <DxGridDataColumn Caption="Acciones" Width="320px" TextAlignment="GridTextAlignment.Center">
                                         <CellDisplayTemplate Context="ctx">
                                             @{ var plan = (CobranzaPlanResumenDto)ctx.DataItem; }
                                             <DxButton Text="Detalle"
@@ -272,7 +272,15 @@
                                                           RenderStyle="ButtonRenderStyle.Secondary"
                                                           RenderStyleMode="ButtonRenderStyleMode.Outline"
                                                           CssClass="ms-1"
-                                                          Click="@(async () => await JS.InvokeVoidAsync("open", CobranzaClient.ConvenioPdfUrl(plan.EncabezadoId.Value), "_blank"))" />
+                                                          Click="@(() => pdfPopup?.Mostrar(CobranzaClient.ConvenioPdfUrl(plan.EncabezadoId.Value), $"Convenio {plan.Correlativo}"))" />
+                                                @* Pagaré del convenio (título valor por el monto financiado). *@
+                                                <DxButton Text="Pagaré"
+                                                          IconCssClass="bi bi-file-earmark-text"
+                                                          SizeMode="SizeMode.Small"
+                                                          RenderStyle="ButtonRenderStyle.Secondary"
+                                                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                          CssClass="ms-1"
+                                                          Click="@(() => pdfPopup?.Mostrar(CobranzaClient.PagarePdfUrl(plan.EncabezadoId.Value), $"Pagaré {plan.Correlativo}"))" />
                                             }
                                             @* Pruebas operativas jul-2026: anulación de convenio. *@
                                             @if (plan.EstadoId == 1 && plan.EncabezadoId is not null)
@@ -465,11 +473,15 @@
     </FooterContentTemplate>
 </DxPopup>
 
+@* Convenio y pagaré se ven dentro de la misma vista, como los comprobantes de almacén. *@
+<PdfPreviewPopup @ref="pdfPopup" />
+
 @code {
     private const string ToastName = "cobranza-plan";
     private const string GridLayoutStorageKey = "cobranza-planes-grid-layout";
 
     private DxGrid? planesGrid;
+    private PdfPreviewPopup? pdfPopup;
 
     private void MostrarColumnChooser() => planesGrid?.ShowColumnChooser();
 
