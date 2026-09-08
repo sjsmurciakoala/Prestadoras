@@ -32,6 +32,7 @@ using SIAD.Services.Tarifario;
 using SIAD.Services.Presupuesto;
 using SIAD.Services.Auditoria;
 using SIAD.Services.TalentoHumano;
+using SIAD.Services.ActivosFijos;
 
 namespace SIAD.Services;
 
@@ -72,6 +73,10 @@ public static class ServiceRegistration
         services.AddScoped<IEmpleadosService, EmpleadosService>();
         // Catálogos de cargos y departamentos (2026-08-19_th_cargo_departamento.sql).
         services.AddScoped<ICatalogoThService, CatalogoThService>();
+
+        // Activos Fijos F1 - registro (2026-09-08_af_activos_fijos_f1_registro.sql).
+        services.AddScoped<ICatalogosActivosFijosService, CatalogosActivosFijosService>();
+        services.AddScoped<IActivosFijosService, ActivosFijosService>();
 
         //solicitudes
         services.AddScoped<ISolicitudesService, SolicitudesService>();

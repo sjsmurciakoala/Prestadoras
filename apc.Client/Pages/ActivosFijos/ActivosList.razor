@@ -1,0 +1,260 @@
+@page "/activos-fijos/activos"
+@attribute [Authorize(Policy = PermissionNames.ActivosFijos.Activos.View)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.ActivosFijos
+@using apc.Client.Services
+@using apc.Client.Services.ActivosFijos
+
+@inject ActivosFijosClient ActivosClient
+@inject CatalogosActivosFijosClient CatalogosClient
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Activos fijos</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="ActivosToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Activos fijos</h2>
+            <p class="page-subtitle">Registro y control del patrimonio de la empresa</p>
+        </div>
+        <DxButton Text="Nuevo activo" IconCssClass="bi bi-plus-lg" RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern" Click="@(() => Navigation.NavigateTo("/activos-fijos/activos/nuevo"))" />
+    </div>
+
+    <div class="modern-card summary-card mb-3">
+        <div class="row g-3">
+            <div class="col-6 col-lg-3">
+                <div class="kpi-label">En el patrimonio</div>
+                <div class="kpi-value">@resumen.EnPatrimonio.ToString("N0")</div>
+                <div class="kpi-hint">de @resumen.TotalActivos.ToString("N0") registrados</div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="kpi-label">Valor de compra</div>
+                <div class="kpi-value">@resumen.ValorCompra.ToString("N2")</div>
+                <div class="kpi-hint">Lempiras</div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="kpi-label">Depreciación acumulada</div>
+                <div class="kpi-value">@resumen.DepreciacionAcumulada.ToString("N2")</div>
+                <div class="kpi-hint">Valor en libros: @resumen.ValorLibros.ToString("N2")</div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="kpi-label">Pendientes de completar</div>
+                <div class="kpi-value @(resumen.PendientesCompletar > 0 ? "text-warning" : "")">@resumen.PendientesCompletar.ToString("N0")</div>
+                <div class="kpi-hint">@resumen.SinResponsable.ToString("N0") sin responsable</div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@activos" KeyFieldName="@nameof(ActivoFijoListItemDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)"
+                                   Placeholder="Código, descripción, serie o placa..."
+                                   InputDelay="600" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                   CssClass="me-1" Style="min-width: 250px;" />
+
+                        <DxComboBox Data="@tipos" Value="@tipoSeleccionado"
+                                    ValueChanged="@((TipoActivoLookupDto? v) => OnTipoChanged(v))"
+                                    TextFieldName="@nameof(TipoActivoLookupDto.Nombre)"
+                                    NullText="Todos los tipos" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    CssClass="me-1" Style="min-width: 180px;" TData="TipoActivoLookupDto" TValue="TipoActivoLookupDto" />
+
+                        <DxComboBox Data="@estados" Value="@estadoSeleccionado"
+                                    ValueChanged="@((CatalogoAfDto? v) => OnEstadoChanged(v))"
+                                    TextFieldName="@nameof(CatalogoAfDto.Nombre)"
+                                    NullText="Todos los estados" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    CssClass="me-1" Style="min-width: 170px;" TData="CatalogoAfDto" TValue="CatalogoAfDto" />
+
+                        <div class="d-flex align-items-center me-2">
+                            <DxCheckBox Checked="@soloPendientes" CheckedChanged="@((bool v) => OnPendientesChanged(v))"
+                                        CheckType="CheckType.Switch">Solo pendientes</DxCheckBox>
+                        </div>
+
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" CssClass="me-1" />
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+                        <div class="ms-auto text-muted small">Total: <span class="fw-bold">@activos.Count.ToString("N0")</span></div>
+                    </div>
+                </ToolbarTemplate>
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(ActivoFijoListItemDto.CodigoActivo)" Caption="Código" Width="130px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ActivoFijoListItemDto item)
+                            {
+                                <div class="d-flex align-items-center gap-1">
+                                    <span class="fw-semibold">@item.CodigoActivo</span>
+                                    @if (item.PendienteCompletar)
+                                    {
+                                        <i class="bi bi-exclamation-triangle-fill text-warning"
+                                           title="Registro migrado: le falta tipo o estado"></i>
+                                    }
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(ActivoFijoListItemDto.Descripcion)" Caption="Descripción" MinWidth="220" />
+                    <DxGridDataColumn FieldName="@nameof(ActivoFijoListItemDto.TipoActivo)" Caption="Tipo" MinWidth="130">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ActivoFijoListItemDto item)
+                            {
+                                <span class="@(string.IsNullOrWhiteSpace(item.TipoActivo) ? "text-muted fst-italic" : "")">
+                                    @(string.IsNullOrWhiteSpace(item.TipoActivo) ? "Sin clasificar" : item.TipoActivo)
+                                </span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(ActivoFijoListItemDto.Responsable)" Caption="Responsable" MinWidth="150">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ActivoFijoListItemDto item)
+                            {
+                                <span class="@(string.IsNullOrWhiteSpace(item.Responsable) ? "text-muted fst-italic" : "")">
+                                    @(string.IsNullOrWhiteSpace(item.Responsable) ? "Sin asignar" : item.Responsable)
+                                </span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(ActivoFijoListItemDto.Ubicacion)" Caption="Ubicación" MinWidth="130" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(ActivoFijoListItemDto.Serie)" Caption="Serie" Width="130px" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(ActivoFijoListItemDto.FechaCompra)" Caption="Compra" Width="115px"
+                                      DisplayFormat="dd/MM/yyyy" />
+                    <DxGridDataColumn FieldName="@nameof(ActivoFijoListItemDto.ValorCompra)" Caption="Valor compra" Width="140px"
+                                      DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="@nameof(ActivoFijoListItemDto.DepreciacionAcumulada)" Caption="Depreciación" Width="140px"
+                                      DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="@nameof(ActivoFijoListItemDto.ValorLibros)" Caption="Valor en libros" Width="145px"
+                                      DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn Caption="Estado" Width="140px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ActivoFijoListItemDto item)
+                            {
+                                <span class="badge-status @ClaseEstado(item)">@TextoEstado(item)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Acciones" Width="90px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ActivoFijoListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-edit" title="Abrir ficha"
+                                            @onclick="() => AbrirFicha(item.Id)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay activos que coincidan con el filtro.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+@code {
+    private DxGrid? grid;
+    private List<ActivoFijoListItemDto> activos = new();
+    private ActivoFijoResumenDto resumen = new();
+
+    private List<TipoActivoLookupDto> tipos = new();
+    private List<CatalogoAfDto> estados = new();
+
+    private string filtroBusqueda = string.Empty;
+    private TipoActivoLookupDto? tipoSeleccionado;
+    private CatalogoAfDto? estadoSeleccionado;
+    private bool soloPendientes;
+
+    private bool isLoading;
+    private string? errorMessage;
+
+    private const string GridLayoutStorageKey = "activos-fijos-activos-grid-layout";
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarCatalogosAsync();
+        await CargarAsync();
+    }
+
+    private async Task CargarCatalogosAsync()
+    {
+        try { tipos = await CatalogosClient.GetTiposLookupAsync(); } catch { tipos = new(); }
+        try { estados = await CatalogosClient.GetEstadosAsync(); } catch { estados = new(); }
+    }
+
+    private ActivoFijoFilterDto BuildFilter() => new()
+    {
+        Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
+        TipoActivoId = tipoSeleccionado?.Id,
+        EstadoActivoId = estadoSeleccionado?.Id,
+        SoloPendientes = soloPendientes ? true : null
+    };
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            activos = await ActivosClient.GetAsync(BuildFilter());
+            resumen = await ActivosClient.GetResumenAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudieron cargar los activos: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnBusquedaChanged(string v) { filtroBusqueda = v; await CargarAsync(); }
+    private async Task OnTipoChanged(TipoActivoLookupDto? v) { tipoSeleccionado = v; await CargarAsync(); }
+    private async Task OnEstadoChanged(CatalogoAfDto? v) { estadoSeleccionado = v; await CargarAsync(); }
+    private async Task OnPendientesChanged(bool v) { soloPendientes = v; await CargarAsync(); }
+
+    private void AbrirFicha(int id) => Navigation.NavigateTo($"/activos-fijos/activos/{id}");
+
+    // El código interno del estado nunca se muestra: siempre el nombre del catálogo.
+    private static string TextoEstado(ActivoFijoListItemDto item)
+        => string.IsNullOrWhiteSpace(item.EstadoActivo) ? "SIN ESTADO" : item.EstadoActivo.ToUpperInvariant();
+
+    private static string ClaseEstado(ActivoFijoListItemDto item)
+    {
+        if (string.IsNullOrWhiteSpace(item.EstadoActivo)) return "inactive";
+        return item.EstadoEsFinal ? "inactive" : "active";
+    }
+}

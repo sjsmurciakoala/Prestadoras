@@ -1,0 +1,875 @@
+@page "/activos-fijos/activos/nuevo"
+@page "/activos-fijos/activos/{Id:int}"
+@attribute [Authorize(Policy = PermissionNames.ActivosFijos.Activos.View)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.ActivosFijos
+@using SIAD.Core.DTOs.Proveedores
+@using SIAD.Core.DTOs.TalentoHumano
+@using apc.Client.Services
+@using apc.Client.Services.ActivosFijos
+@using apc.Client.Services.Proveedores
+@using apc.Client.Services.TalentoHumano
+
+@inject ActivosFijosClient ActivosClient
+@inject CatalogosActivosFijosClient CatalogosClient
+@inject EmpleadosClient EmpleadosClient
+@inject ProveedoresClient ProveedoresClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>SIAD - @(EsNuevo ? "Nuevo activo fijo" : $"Activo {modelo.CodigoActivo}")</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="ActivoFormToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">@(EsNuevo ? "Nuevo activo fijo" : modelo.Descripcion)</h2>
+            <p class="page-subtitle">
+                @if (EsNuevo)
+                {
+                    <text>El código se genera solo al guardar, con el prefijo del tipo de activo</text>
+                }
+                else
+                {
+                    <text>Código @modelo.CodigoActivo · @(modelo.EstadoActivo ?? "sin estado")</text>
+                }
+            </p>
+        </div>
+        <div class="d-flex gap-2">
+            @if (!EsNuevo)
+            {
+                <DxButton Text="Reasignar" IconCssClass="bi bi-person-check" RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline" Click="AbrirAsignar" />
+            }
+            <DxButton Text="Volver" IconCssClass="bi bi-arrow-left" RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="@(() => Navigation.NavigateTo("/activos-fijos/activos"))" />
+        </div>
+    </div>
+
+    @if (cargando)
+    {
+        <div class="modern-card p-4 text-center">
+            <DxLoadingPanel Visible="true" Text="Cargando..." />
+            <div style="height:80px"></div>
+        </div>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+        }
+
+        @if (!EsNuevo && modelo.TipoActivoId is null)
+        {
+            <div class="alert alert-warning mb-3" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                Este activo viene del histórico y todavía no tiene tipo ni estado. Complételo para
+                que entre en la depreciación y en los informes del módulo.
+            </div>
+        }
+
+        <div class="modern-card">
+            <EditForm Model="modelo" OnValidSubmit="GuardarAsync" OnInvalidSubmit="AlFallarValidacion"
+                      Context="EditFormContext">
+                <DataAnnotationsValidator />
+
+                @* Los campos obligatorios se eligen en combos atados a variables de la página, no
+                   directamente al modelo, así que el editor no puede pintar su propio mensaje. Sin
+                   este resumen, guardar con el estado vacío no producía ninguna señal: el formulario
+                   simplemente no se enviaba. Va FUERA de las pestañas para que se vea desde cualquiera. *@
+                @if (mostrarErrores)
+                {
+                    <div class="alert alert-danger mb-3 shadow-sm" role="alert">
+                        <h6 class="alert-heading">
+                            <i class="bi bi-exclamation-circle-fill me-2"></i>Faltan datos obligatorios
+                        </h6>
+                        <ValidationSummary />
+                    </div>
+                }
+
+                <DxTabs @bind-ActiveTabIndex="tabActiva" CssClass="mb-3">
+
+                    <DxTabPage Text="Identificación">
+                        <ContentTemplate>
+                            <DxFormLayout>
+                                <DxFormLayoutGroup Caption="Qué es el activo" ColSpanXs="12">
+                                    @if (!EsNuevo)
+                                    {
+                                        <DxFormLayoutItem Caption="Código" ColSpanMd="4">
+                                            <DxTextBox Text="@modelo.CodigoActivo" ReadOnly="true" ValidationEnabled="false" />
+                                        </DxFormLayoutItem>
+                                    }
+                                    <DxFormLayoutItem Caption="Descripción" ColSpanMd="@(EsNuevo ? 12 : 8)">
+                                        <DxTextBox @bind-Text="modelo.Descripcion" NullText="Ej. Camioneta Toyota Hilux 2024" />
+                                    </DxFormLayoutItem>
+
+                                    <DxFormLayoutItem Caption="Tipo de activo" ColSpanMd="6">
+                                        <DxComboBox Data="@tipos" Value="@tipoSeleccionado" ValueExpression="@(() => tipoSeleccionado)"
+                                                    ValueChanged="@((TipoActivoLookupDto? v) => OnTipoSeleccionado(v))"
+                                                    TextFieldName="@nameof(TipoActivoLookupDto.Nombre)"
+                                                    NullText="Seleccione el tipo"
+                                                    TData="TipoActivoLookupDto" TValue="TipoActivoLookupDto" />
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Estado" ColSpanMd="6">
+                                        <DxComboBox Data="@estados" Value="@estadoSeleccionado" ValueExpression="@(() => estadoSeleccionado)"
+                                                    ValueChanged="@((CatalogoAfDto? v) => OnEstadoSeleccionado(v))"
+                                                    TextFieldName="@nameof(CatalogoAfDto.Nombre)"
+                                                    NullText="Seleccione el estado"
+                                                    TData="CatalogoAfDto" TValue="CatalogoAfDto" />
+                                    </DxFormLayoutItem>
+
+                                    <DxFormLayoutItem Caption="Marca" ColSpanMd="4">
+                                        <DxTextBox @bind-Text="modelo.Marca" />
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Modelo" ColSpanMd="4">
+                                        <DxTextBox @bind-Text="modelo.Modelo" />
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Serie" ColSpanMd="4">
+                                        <DxTextBox @bind-Text="modelo.Serie" />
+                                    </DxFormLayoutItem>
+
+                                    <DxFormLayoutItem Caption="Placa o matrícula" ColSpanMd="4">
+                                        <DxTextBox @bind-Text="modelo.Placa" />
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Código de barras" ColSpanMd="4">
+                                        <DxTextBox @bind-Text="modelo.CodigoBarra" NullText="Etiqueta de inventario físico" />
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Clase" ColSpanMd="4">
+                                        <DxTextBox @bind-Text="modelo.Clase" />
+                                    </DxFormLayoutItem>
+                                </DxFormLayoutGroup>
+
+                                <DxFormLayoutGroup Caption="Dónde está y quién responde" ColSpanXs="12">
+                                    <DxFormLayoutItem Caption="Ubicación" ColSpanMd="6">
+                                        <DxComboBox Data="@ubicaciones" Value="@ubicacionSeleccionada" ValueExpression="@(() => ubicacionSeleccionada)"
+                                                    ValueChanged="@((UbicacionActivoLookupDto? v) => OnUbicacionSeleccionada(v))"
+                                                    TextFieldName="@nameof(UbicacionActivoLookupDto.Ruta)"
+                                                    NullText="Sin ubicación asignada"
+                                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                    TData="UbicacionActivoLookupDto" TValue="UbicacionActivoLookupDto" />
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Responsable" ColSpanMd="6">
+                                        <DxComboBox Data="@empleados" Value="@empleadoSeleccionado" ValueExpression="@(() => empleadoSeleccionado)"
+                                                    ValueChanged="@((EmpleadoLookupDto? v) => OnEmpleadoSeleccionado(v))"
+                                                    TextFieldName="@nameof(EmpleadoLookupDto.Nombre)"
+                                                    NullText="Sin responsable asignado"
+                                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                    FilteringMode="DataGridFilteringMode.Contains"
+                                                    TData="EmpleadoLookupDto" TValue="EmpleadoLookupDto" />
+                                    </DxFormLayoutItem>
+
+                                    @* Los activos migrados de SIMAFI traen el responsable como texto libre y no
+                                       están ligados a th_empleado. Sin estos dos campos el nombre existe en la
+                                       base y en el listado, pero desaparece de la ficha. *@
+                                    @if (empleadoSeleccionado is null)
+                                    {
+                                        <DxFormLayoutItem Caption="Responsable sin catalogar" ColSpanMd="6">
+                                            <DxTextBox @bind-Text="modelo.Responsable"
+                                                       NullText="Nombre escrito a mano" />
+                                            <div class="form-text">
+                                                Elija un empleado del catálogo arriba para reemplazarlo.
+                                            </div>
+                                        </DxFormLayoutItem>
+                                        <DxFormLayoutItem Caption="Cargo del responsable" ColSpanMd="6">
+                                            <DxTextBox @bind-Text="modelo.CargoResponsable" />
+                                        </DxFormLayoutItem>
+                                    }
+
+                                    <DxFormLayoutItem Caption="Características especiales" ColSpanMd="12">
+                                        <DxMemo @bind-Text="modelo.PropiedadesEspeciales" Rows="2"
+                                                NullText="Rasgos que distinguen a este activo de otro igual" />
+                                    </DxFormLayoutItem>
+                                </DxFormLayoutGroup>
+                            </DxFormLayout>
+                        </ContentTemplate>
+                    </DxTabPage>
+
+                    <DxTabPage Text="Compra y depreciación">
+                        <ContentTemplate>
+                            <DxFormLayout>
+                                <DxFormLayoutGroup Caption="Origen del activo" ColSpanXs="12">
+                                    <DxFormLayoutItem Caption="Proveedor" ColSpanMd="6">
+                                        <DxComboBox Data="@proveedores" Value="@proveedorSeleccionado" ValueExpression="@(() => proveedorSeleccionado)"
+                                                    ValueChanged="@((ProveedorListItemDto? v) => OnProveedorSeleccionado(v))"
+                                                    TextFieldName="@nameof(ProveedorListItemDto.Nombre)"
+                                                    NullText="Sin proveedor"
+                                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                    FilteringMode="DataGridFilteringMode.Contains"
+                                                    TData="ProveedorListItemDto" TValue="ProveedorListItemDto" />
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Número de factura" ColSpanMd="3">
+                                        <DxTextBox @bind-Text="modelo.NumeroFactura" />
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Fecha de compra" ColSpanMd="3">
+                                        <DxDateEdit Date="@ADateTime(modelo.FechaCompra)"
+                                                    DateChanged="@((DateTime? v) => modelo.FechaCompra = ADateOnly(v))"
+                                                    ValidationEnabled="false"
+                                                    NullText="dd/mm/aaaa" />
+                                    </DxFormLayoutItem>
+                                </DxFormLayoutGroup>
+
+                                <DxFormLayoutGroup Caption="Valores" ColSpanXs="12">
+                                    <DxFormLayoutItem Caption="Valor de compra" ColSpanMd="4">
+                                        <DxSpinEdit Value="@modelo.ValorCompra" DisplayFormat="N2" MinValue="0"
+                                                    ValueChanged="@((decimal v) => OnValorCompraChanged(v))"
+                                                    ValueExpression="@(() => modelo.ValorCompra)" />
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Valor residual" ColSpanMd="4">
+                                        <DxSpinEdit @bind-Value="modelo.ValorRescate" DisplayFormat="N2" MinValue="0"
+                                                    NullText="@TextoResidualSugerido" />
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Vida útil (años)" ColSpanMd="4">
+                                        <DxSpinEdit @bind-Value="modelo.VidaUtilAnios" DisplayFormat="N1" MinValue="0"
+                                                    Increment="0.5m" NullText="@TextoVidaUtilSugerida" />
+                                    </DxFormLayoutItem>
+                                </DxFormLayoutGroup>
+
+                                <DxFormLayoutGroup Caption="Depreciación" ColSpanXs="12">
+                                    <DxFormLayoutItem Caption="¿Se deprecia?" ColSpanMd="3">
+                                        <DxCheckBox @bind-Checked="modelo.Depreciar" CheckType="CheckType.Switch">
+                                            @(modelo.Depreciar ? "Sí" : "No")
+                                        </DxCheckBox>
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Método" ColSpanMd="4">
+                                        <DxComboBox Data="@metodos" Value="@metodoSeleccionado" ValueExpression="@(() => metodoSeleccionado)"
+                                                    ValueChanged="@((CatalogoAfDto? v) => OnMetodoSeleccionado(v))"
+                                                    TextFieldName="@nameof(CatalogoAfDto.Nombre)"
+                                                    NullText="Hereda el del tipo"
+                                                    Enabled="@modelo.Depreciar"
+                                                    TData="CatalogoAfDto" TValue="CatalogoAfDto" />
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Empieza a depreciar" ColSpanMd="5">
+                                        <DxDateEdit Date="@ADateTime(modelo.FechaInicioDepreciacion)"
+                                                    DateChanged="@((DateTime? v) => modelo.FechaInicioDepreciacion = ADateOnly(v))"
+                                                    ValidationEnabled="false"
+                                                    Enabled="@modelo.Depreciar"
+                                                    NullText="Igual a la fecha de compra" />
+                                    </DxFormLayoutItem>
+
+                                    <DxFormLayoutItem Caption="Depreciación ya acumulada" ColSpanMd="6">
+                                        <DxSpinEdit @bind-Value="modelo.DepreciacionAcumulada" DisplayFormat="N2" MinValue="0" />
+                                        <div class="form-text">
+                                            Saldo con el que entra un activo que ya venía depreciándose en otro sistema.
+                                        </div>
+                                    </DxFormLayoutItem>
+                                </DxFormLayoutGroup>
+
+                                @if (!EsNuevo)
+                                {
+                                    <DxFormLayoutGroup Caption="Calculado por el sistema" ColSpanXs="12">
+                                        <DxFormLayoutItem Caption="Cuota mensual" ColSpanMd="3">
+                                            <DxTextBox Text="@modelo.DepreciacionMensual.ToString("N2")" ReadOnly="true" ValidationEnabled="false" />
+                                        </DxFormLayoutItem>
+                                        <DxFormLayoutItem Caption="Cuota diaria" ColSpanMd="3">
+                                            <DxTextBox Text="@modelo.DepreciacionDiaria.ToString("N2")" ReadOnly="true" ValidationEnabled="false" />
+                                        </DxFormLayoutItem>
+                                        <DxFormLayoutItem Caption="Valor en libros" ColSpanMd="3">
+                                            <DxTextBox Text="@modelo.ValorLibros.ToString("N2")" ReadOnly="true" ValidationEnabled="false" />
+                                        </DxFormLayoutItem>
+                                        <DxFormLayoutItem Caption="Fin de vida útil" ColSpanMd="3">
+                                            <DxTextBox Text="@(modelo.FechaFinDepreciacion?.ToString("dd/MM/yyyy") ?? "—")" ReadOnly="true" ValidationEnabled="false" />
+                                        </DxFormLayoutItem>
+                                    </DxFormLayoutGroup>
+                                }
+                            </DxFormLayout>
+                        </ContentTemplate>
+                    </DxTabPage>
+
+                    <DxTabPage Text="Contabilidad y seguros">
+                        <ContentTemplate>
+                            <DxFormLayout>
+                                <DxFormLayoutGroup Caption="Cuentas contables" ColSpanXs="12">
+                                    <DxFormLayoutItem ColSpanMd="12">
+                                        <div class="alert alert-info py-2 mb-2">
+                                            <i class="bi bi-info-circle me-2"></i>
+                                            Si deja una cuenta vacía, el activo hereda la del tipo seleccionado.
+                                        </div>
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Cuenta del activo" ColSpanMd="4">
+                                        <DxTextBox @bind-Text="modelo.CuentaContable" NullText="@(tipoSeleccionado?.CuentaActivo ?? "Sin cuenta en el tipo")" />
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Depreciación acumulada" ColSpanMd="4">
+                                        <DxTextBox @bind-Text="modelo.CuentaDepreciacion" NullText="@(tipoSeleccionado?.CuentaDepreciacionAcumulada ?? "Sin cuenta en el tipo")" />
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Gasto por depreciación" ColSpanMd="4">
+                                        <DxTextBox @bind-Text="modelo.CuentaGasto" NullText="@(tipoSeleccionado?.CuentaGastoDepreciacion ?? "Sin cuenta en el tipo")" />
+                                    </DxFormLayoutItem>
+                                </DxFormLayoutGroup>
+
+                                <DxFormLayoutGroup Caption="Seguro y garantía" ColSpanXs="12">
+                                    <DxFormLayoutItem Caption="Póliza de seguro" ColSpanMd="4">
+                                        <DxTextBox @bind-Text="modelo.PolizaSeguro" />
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Vence la póliza" ColSpanMd="4">
+                                        <DxDateEdit Date="@ADateTime(modelo.PolizaVence)"
+                                                    DateChanged="@((DateTime? v) => modelo.PolizaVence = ADateOnly(v))"
+                                                    ValidationEnabled="false"
+                                                    NullText="dd/mm/aaaa" />
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Vence la garantía" ColSpanMd="4">
+                                        <DxDateEdit Date="@ADateTime(modelo.GarantiaVence)"
+                                                    DateChanged="@((DateTime? v) => modelo.GarantiaVence = ADateOnly(v))"
+                                                    ValidationEnabled="false"
+                                                    NullText="dd/mm/aaaa" />
+                                    </DxFormLayoutItem>
+
+                                    <DxFormLayoutItem Caption="Observaciones" ColSpanMd="12">
+                                        <DxMemo @bind-Text="modelo.Observacion" Rows="3" />
+                                    </DxFormLayoutItem>
+                                </DxFormLayoutGroup>
+                            </DxFormLayout>
+                        </ContentTemplate>
+                    </DxTabPage>
+
+                    @if (!EsNuevo)
+                    {
+                        <DxTabPage Text="@($"Componentes ({componentes.Count})")">
+                            <ContentTemplate>
+                                <div class="d-flex justify-content-end mb-2">
+                                    <DxButton Text="Agregar componente" IconCssClass="bi bi-plus-lg"
+                                              RenderStyle="ButtonRenderStyle.Secondary" Click="AbrirComponenteNuevo" />
+                                </div>
+                                <DxGrid Data="@componentes" KeyFieldName="@nameof(ActivoComponenteDto.Id)"
+                                        PageSize="15" PageSizeSelectorVisible="true"
+                                        PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                                        PagerPosition="GridPagerPosition.Bottom"
+                                        ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                                        ShowGroupPanel="false" CssClass="grid-solicitudes">
+                                    <Columns>
+                                        <DxGridDataColumn FieldName="@nameof(ActivoComponenteDto.Descripcion)" Caption="Componente" MinWidth="200" />
+                                        <DxGridDataColumn FieldName="@nameof(ActivoComponenteDto.Marca)" Caption="Marca" Width="120px" />
+                                        <DxGridDataColumn FieldName="@nameof(ActivoComponenteDto.Serie)" Caption="Serie" Width="140px" />
+                                        <DxGridDataColumn FieldName="@nameof(ActivoComponenteDto.Cantidad)" Caption="Cantidad" Width="100px"
+                                                          DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                                        <DxGridDataColumn FieldName="@nameof(ActivoComponenteDto.Valor)" Caption="Valor" Width="120px"
+                                                          DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                                        <DxGridDataColumn Caption="Acciones" Width="110px" TextAlignment="GridTextAlignment.Center">
+                                            <CellDisplayTemplate Context="cell">
+                                                @if (cell.DataItem is ActivoComponenteDto item)
+                                                {
+                                                    <div class="d-flex justify-content-center gap-2">
+                                                        <button type="button" class="btn-icon btn-edit" title="Editar"
+                                                                @onclick="() => AbrirComponente(item)" @onclick:stopPropagation="true">
+                                                            <i class="bi bi-pencil-square"></i>
+                                                        </button>
+                                                        <button type="button" class="btn-icon btn-delete" title="Eliminar"
+                                                                @onclick="() => EliminarComponenteAsync(item)" @onclick:stopPropagation="true">
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                    </div>
+                                                }
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
+                                    </Columns>
+                                    <EmptyDataAreaTemplate Context="sinComponentes">
+                                        <div class="p-4 text-center text-muted">Este activo no tiene componentes registrados.</div>
+                                    </EmptyDataAreaTemplate>
+                                </DxGrid>
+                            </ContentTemplate>
+                        </DxTabPage>
+
+                        <DxTabPage Text="Historial de asignación">
+                            <ContentTemplate>
+                                <DxGrid Data="@asignaciones" KeyFieldName="@nameof(ActivoAsignacionDto.Id)"
+                                        PageSize="15" PageSizeSelectorVisible="true"
+                                        PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                                        PagerPosition="GridPagerPosition.Bottom"
+                                        ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                                        ShowGroupPanel="false" CssClass="grid-solicitudes">
+                                    <Columns>
+                                        <DxGridDataColumn FieldName="@nameof(ActivoAsignacionDto.FechaDesde)" Caption="Desde" Width="115px"
+                                                          DisplayFormat="dd/MM/yyyy" />
+                                        <DxGridDataColumn Caption="Hasta" Width="115px">
+                                            <CellDisplayTemplate Context="cell">
+                                                @if (cell.DataItem is ActivoAsignacionDto item)
+                                                {
+                                                    @if (item.Vigente)
+                                                    {
+                                                        <span class="badge-status active">VIGENTE</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span>@item.FechaHasta?.ToString("dd/MM/yyyy")</span>
+                                                    }
+                                                }
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
+                                        <DxGridDataColumn FieldName="@nameof(ActivoAsignacionDto.Responsable)" Caption="Responsable" MinWidth="160" />
+                                        <DxGridDataColumn FieldName="@nameof(ActivoAsignacionDto.Ubicacion)" Caption="Ubicación" MinWidth="140" />
+                                        <DxGridDataColumn FieldName="@nameof(ActivoAsignacionDto.Motivo)" Caption="Motivo" MinWidth="180" />
+                                        <DxGridDataColumn FieldName="@nameof(ActivoAsignacionDto.UsuarioCreacion)" Caption="Registró" Width="130px" />
+                                    </Columns>
+                                    <EmptyDataAreaTemplate Context="sinAsignaciones">
+                                        <div class="p-4 text-center text-muted">Todavía no hay movimientos de asignación.</div>
+                                    </EmptyDataAreaTemplate>
+                                </DxGrid>
+                            </ContentTemplate>
+                        </DxTabPage>
+                    }
+                </DxTabs>
+
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                    <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                              RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!guardando)"
+                              Click="@(() => Navigation.NavigateTo("/activos-fijos/activos"))" />
+                    <DxButton SubmitFormOnClick="true" Text="@(guardando ? "Guardando..." : "Guardar")"
+                              IconCssClass="bi bi-check-lg" RenderStyle="ButtonRenderStyle.Primary"
+                              Enabled="@(!guardando)" />
+                </div>
+            </EditForm>
+        </div>
+    }
+</div>
+
+<DxPopup @bind-Visible="asignarVisible" Width="min(520px, 95vw)" HeaderText="Reasignar activo"
+         CloseOnOutsideClick="false">
+    <BodyContentTemplate Context="popupBody">
+        <div class="p-3">
+            <EditForm Model="asignacion" OnValidSubmit="AsignarAsync" Context="AsignarFormContext">
+                <DataAnnotationsValidator />
+                <DxFormLayout>
+                    <DxFormLayoutItem Caption="Fecha" ColSpanMd="12">
+                        <DxDateEdit Date="@ADateTime(asignacion.Fecha)"
+                                    DateChanged="@((DateTime? v) => asignacion.Fecha = ADateOnly(v))"
+                                    ValidationEnabled="false" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Nuevo responsable" ColSpanMd="12">
+                        <DxComboBox Data="@empleados" Value="@asignarEmpleado" ValueExpression="@(() => asignarEmpleado)"
+                                    ValueChanged="@((EmpleadoLookupDto? v) => asignarEmpleado = v)"
+                                    TextFieldName="@nameof(EmpleadoLookupDto.Nombre)"
+                                    NullText="Sin responsable"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    FilteringMode="DataGridFilteringMode.Contains"
+                                    TData="EmpleadoLookupDto" TValue="EmpleadoLookupDto" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Nueva ubicación" ColSpanMd="12">
+                        <DxComboBox Data="@ubicaciones" Value="@asignarUbicacion" ValueExpression="@(() => asignarUbicacion)"
+                                    ValueChanged="@((UbicacionActivoLookupDto? v) => asignarUbicacion = v)"
+                                    TextFieldName="@nameof(UbicacionActivoLookupDto.Ruta)"
+                                    NullText="Sin ubicación"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    TData="UbicacionActivoLookupDto" TValue="UbicacionActivoLookupDto" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Motivo" ColSpanMd="12">
+                        <DxMemo @bind-Text="asignacion.Motivo" Rows="2"
+                                NullText="Por qué cambia de responsable o de lugar" />
+                    </DxFormLayoutItem>
+                </DxFormLayout>
+
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                    <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" Click="@(() => asignarVisible = false)" />
+                    <DxButton SubmitFormOnClick="true" Text="Registrar asignación"
+                              RenderStyle="ButtonRenderStyle.Primary" IconCssClass="bi bi-person-check" />
+                </div>
+            </EditForm>
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="componenteVisible" Width="min(520px, 95vw)" HeaderText="Componente del activo"
+         CloseOnOutsideClick="false">
+    <BodyContentTemplate Context="popupBody">
+        <div class="p-3">
+            <EditForm Model="componente" OnValidSubmit="GuardarComponenteAsync" Context="ComponenteFormContext">
+                <DataAnnotationsValidator />
+                <DxFormLayout>
+                    <DxFormLayoutItem Caption="Descripción" ColSpanMd="12">
+                        <DxTextBox @bind-Text="componente.Descripcion" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Marca" ColSpanMd="6">
+                        <DxTextBox @bind-Text="componente.Marca" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Modelo" ColSpanMd="6">
+                        <DxTextBox @bind-Text="componente.Modelo" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Serie" ColSpanMd="12">
+                        <DxTextBox @bind-Text="componente.Serie" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Cantidad" ColSpanMd="6">
+                        <DxSpinEdit @bind-Value="componente.Cantidad" DisplayFormat="N2" MinValue="0" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Valor" ColSpanMd="6">
+                        <DxSpinEdit @bind-Value="componente.Valor" DisplayFormat="N2" MinValue="0" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Observación" ColSpanMd="12">
+                        <DxMemo @bind-Text="componente.Observacion" Rows="2" />
+                    </DxFormLayoutItem>
+                </DxFormLayout>
+
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                    <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" Click="@(() => componenteVisible = false)" />
+                    <DxButton SubmitFormOnClick="true" Text="Guardar" RenderStyle="ButtonRenderStyle.Primary" />
+                </div>
+            </EditForm>
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private bool EsNuevo => !Id.HasValue || Id.Value <= 0;
+
+    private ActivoFijoEditDto modelo = new();
+    private int tabActiva;
+    private bool cargando = true;
+    private bool guardando;
+    private bool mostrarErrores;
+    private string? errorMessage;
+
+    private List<TipoActivoLookupDto> tipos = new();
+    private List<CatalogoAfDto> estados = new();
+    private List<CatalogoAfDto> metodos = new();
+    private List<UbicacionActivoLookupDto> ubicaciones = new();
+    private List<EmpleadoLookupDto> empleados = new();
+    private List<ProveedorListItemDto> proveedores = new();
+
+    private TipoActivoLookupDto? tipoSeleccionado;
+    private CatalogoAfDto? estadoSeleccionado;
+    private CatalogoAfDto? metodoSeleccionado;
+    private UbicacionActivoLookupDto? ubicacionSeleccionada;
+    private EmpleadoLookupDto? empleadoSeleccionado;
+    private ProveedorListItemDto? proveedorSeleccionado;
+
+    private List<ActivoAsignacionDto> asignaciones = new();
+    private List<ActivoComponenteDto> componentes = new();
+
+    private bool asignarVisible;
+    private ActivoAsignacionRequestDto asignacion = new();
+    private EmpleadoLookupDto? asignarEmpleado;
+    private UbicacionActivoLookupDto? asignarUbicacion;
+
+    private bool componenteVisible;
+    private ActivoComponenteDto componente = new();
+
+    private string TextoResidualSugerido => tipoSeleccionado is null
+        ? "0.00"
+        : $"Sugerido: {(modelo.ValorCompra * tipoSeleccionado.PorcentajeResidual / 100):N2}";
+
+    private string TextoVidaUtilSugerida => tipoSeleccionado?.VidaUtilAnios is decimal v
+        ? $"Del tipo: {v:N1} años"
+        : "Sin valor en el tipo";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        cargando = true;
+        await CargarCatalogosAsync();
+
+        if (EsNuevo)
+        {
+            modelo = new ActivoFijoEditDto { Depreciar = true, FechaCompra = DateOnly.FromDateTime(DateTime.Today) };
+            asignaciones = new();
+            componentes = new();
+        }
+        else
+        {
+            await CargarActivoAsync(Id!.Value);
+        }
+
+        SincronizarSeleccionados();
+        cargando = false;
+    }
+
+    private async Task CargarCatalogosAsync()
+    {
+        try { tipos = await CatalogosClient.GetTiposLookupAsync(); } catch { tipos = new(); }
+        try { estados = await CatalogosClient.GetEstadosAsync(); } catch { estados = new(); }
+        try { ubicaciones = await CatalogosClient.GetUbicacionesLookupAsync(); } catch { ubicaciones = new(); }
+        try { empleados = await EmpleadosClient.GetLookupAsync(); } catch { empleados = new(); }
+
+        try
+        {
+            // Solo los métodos que el motor sabe calcular: ofrecer los otros invita a
+            // registrar activos que después nadie puede depreciar.
+            var todos = await CatalogosClient.GetMetodosDepreciacionAsync();
+            var disponibles = new List<CatalogoAfDto>();
+            foreach (var m in todos)
+            {
+                if (m.Implementado) disponibles.Add(m);
+            }
+            metodos = disponibles;
+        }
+        catch { metodos = new(); }
+
+        try
+        {
+            var lista = await ProveedoresClient.BuscarAsync(new ProveedorFilterDto { SoloActivos = true });
+            proveedores = new List<ProveedorListItemDto>(lista);
+        }
+        catch { proveedores = new(); }
+    }
+
+    private async Task CargarActivoAsync(int id)
+    {
+        try
+        {
+            errorMessage = null;
+            var dto = await ActivosClient.GetByIdAsync(id);
+            if (dto is null)
+            {
+                errorMessage = "No se encontró el activo solicitado.";
+                modelo = new ActivoFijoEditDto();
+                return;
+            }
+
+            modelo = dto;
+            asignaciones = await ActivosClient.GetAsignacionesAsync(id);
+            componentes = await ActivosClient.GetComponentesAsync(id);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudo cargar el activo: {ex.Message}";
+        }
+    }
+
+    private void SincronizarSeleccionados()
+    {
+        tipoSeleccionado = BuscarTipo(modelo.TipoActivoId);
+        estadoSeleccionado = BuscarCatalogo(estados, modelo.EstadoActivoId);
+        metodoSeleccionado = BuscarCatalogo(metodos, modelo.MetodoDepreciacionId);
+        ubicacionSeleccionada = BuscarUbicacion(modelo.UbicacionId);
+        empleadoSeleccionado = BuscarEmpleado(modelo.EmpleadoId);
+        proveedorSeleccionado = BuscarProveedor(modelo.CodProveedor);
+    }
+
+    private TipoActivoLookupDto? BuscarTipo(int? id)
+    {
+        if (id is null) return null;
+        foreach (var t in tipos) { if (t.Id == id.Value) return t; }
+        return null;
+    }
+
+    private static CatalogoAfDto? BuscarCatalogo(List<CatalogoAfDto> origen, short? id)
+    {
+        if (id is null) return null;
+        foreach (var c in origen) { if (c.Id == id.Value) return c; }
+        return null;
+    }
+
+    private UbicacionActivoLookupDto? BuscarUbicacion(int? id)
+    {
+        if (id is null) return null;
+        foreach (var u in ubicaciones) { if (u.Id == id.Value) return u; }
+        return null;
+    }
+
+    private EmpleadoLookupDto? BuscarEmpleado(int? id)
+    {
+        if (id is null) return null;
+        foreach (var e in empleados) { if (e.Id == id.Value) return e; }
+        return null;
+    }
+
+    private ProveedorListItemDto? BuscarProveedor(string? codigo)
+    {
+        if (string.IsNullOrWhiteSpace(codigo)) return null;
+        foreach (var p in proveedores) { if (string.Equals(p.Codigo, codigo, StringComparison.OrdinalIgnoreCase)) return p; }
+        return null;
+    }
+
+    // Al elegir tipo, el activo nuevo toma prestados sus valores por defecto.
+    private void OnTipoSeleccionado(TipoActivoLookupDto? v)
+    {
+        tipoSeleccionado = v;
+        modelo.TipoActivoId = v?.Id;
+
+        if (v is null) return;
+
+        if (modelo.VidaUtilAnios is null && v.VidaUtilAnios.HasValue)
+        {
+            modelo.VidaUtilAnios = v.VidaUtilAnios;
+        }
+
+        if (modelo.MetodoDepreciacionId is null)
+        {
+            modelo.MetodoDepreciacionId = v.MetodoDepreciacionId;
+            metodoSeleccionado = BuscarCatalogo(metodos, v.MetodoDepreciacionId);
+        }
+
+        if (modelo.ValorRescate is null && modelo.ValorCompra > 0 && v.PorcentajeResidual > 0)
+        {
+            modelo.ValorRescate = Math.Round(modelo.ValorCompra * v.PorcentajeResidual / 100, 2);
+        }
+    }
+
+    private void OnEstadoSeleccionado(CatalogoAfDto? v)
+    {
+        estadoSeleccionado = v;
+        modelo.EstadoActivoId = v?.Id;
+
+        // Un estado que no deprecia apaga la casilla en vez de dejar que el guardado falle.
+        if (v is not null && !v.PermiteDepreciar) modelo.Depreciar = false;
+    }
+
+    private void OnMetodoSeleccionado(CatalogoAfDto? v)
+    {
+        metodoSeleccionado = v;
+        modelo.MetodoDepreciacionId = v?.Id;
+    }
+
+    private void OnUbicacionSeleccionada(UbicacionActivoLookupDto? v)
+    {
+        ubicacionSeleccionada = v;
+        modelo.UbicacionId = v?.Id;
+    }
+
+    private void OnEmpleadoSeleccionado(EmpleadoLookupDto? v)
+    {
+        empleadoSeleccionado = v;
+        modelo.EmpleadoId = v?.Id;
+
+        // Elegir un empleado pisa el nombre escrito a mano, que es lo que se busca.
+        // Limpiar el combo NO lo borra: en los activos migrados ese texto es el único
+        // responsable que existe, y perderlo por vaciar un combo sería un dato menos.
+        if (v is not null)
+        {
+            modelo.Responsable = v.Nombre;
+            modelo.CargoResponsable = v.CargoNombre;
+        }
+    }
+
+    private void OnProveedorSeleccionado(ProveedorListItemDto? v)
+    {
+        proveedorSeleccionado = v;
+        modelo.CodProveedor = v?.Codigo;
+    }
+
+    private void OnValorCompraChanged(decimal v)
+    {
+        modelo.ValorCompra = v;
+        if (modelo.ValorRescate is null && tipoSeleccionado is not null && tipoSeleccionado.PorcentajeResidual > 0)
+        {
+            modelo.ValorRescate = Math.Round(v * tipoSeleccionado.PorcentajeResidual / 100, 2);
+        }
+    }
+
+    /// <summary>
+    /// El formulario no pasó la validación del modelo. Blazor no llama a GuardarAsync y, sin
+    /// esto, el botón parecía no hacer nada.
+    /// </summary>
+    private void AlFallarValidacion() => mostrarErrores = true;
+
+    private async Task GuardarAsync()
+    {
+        mostrarErrores = false;
+        guardando = true;
+        try
+        {
+            var guardado = await ActivosClient.GuardarAsync(modelo);
+            Toast("Éxito", EsNuevo ? $"Activo {guardado.CodigoActivo} registrado." : "Activo actualizado.", ToastRenderStyle.Success);
+
+            if (EsNuevo && guardado.Id.HasValue)
+            {
+                Navigation.NavigateTo($"/activos-fijos/activos/{guardado.Id.Value}");
+                return;
+            }
+
+            modelo = guardado;
+            asignaciones = await ActivosClient.GetAsignacionesAsync(guardado.Id!.Value);
+            SincronizarSeleccionados();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    private void AbrirAsignar()
+    {
+        asignacion = new ActivoAsignacionRequestDto { Fecha = DateOnly.FromDateTime(DateTime.Today) };
+        asignarEmpleado = empleadoSeleccionado;
+        asignarUbicacion = ubicacionSeleccionada;
+        asignarVisible = true;
+    }
+
+    private async Task AsignarAsync()
+    {
+        try
+        {
+            asignacion.EmpleadoId = asignarEmpleado?.Id;
+            asignacion.UbicacionId = asignarUbicacion?.Id;
+            await ActivosClient.AsignarAsync(Id!.Value, asignacion);
+            asignarVisible = false;
+            Toast("Éxito", "Asignación registrada.", ToastRenderStyle.Success);
+            await CargarActivoAsync(Id!.Value);
+            SincronizarSeleccionados();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+    }
+
+    private void AbrirComponenteNuevo()
+    {
+        componente = new ActivoComponenteDto { Cantidad = 1 };
+        componenteVisible = true;
+    }
+
+    private void AbrirComponente(ActivoComponenteDto item)
+    {
+        componente = new ActivoComponenteDto
+        {
+            Id = item.Id,
+            Descripcion = item.Descripcion,
+            Marca = item.Marca,
+            Modelo = item.Modelo,
+            Serie = item.Serie,
+            Cantidad = item.Cantidad,
+            Valor = item.Valor,
+            Observacion = item.Observacion
+        };
+        componenteVisible = true;
+    }
+
+    private async Task GuardarComponenteAsync()
+    {
+        try
+        {
+            await ActivosClient.GuardarComponenteAsync(Id!.Value, componente);
+            componenteVisible = false;
+            componentes = await ActivosClient.GetComponentesAsync(Id!.Value);
+            Toast("Éxito", "Componente guardado.", ToastRenderStyle.Success);
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+    }
+
+    private async Task EliminarComponenteAsync(ActivoComponenteDto item)
+    {
+        if (item.Id is null) return;
+        try
+        {
+            await ActivosClient.EliminarComponenteAsync(item.Id.Value);
+            componentes = await ActivosClient.GetComponentesAsync(Id!.Value);
+            Toast("Éxito", "Componente eliminado.", ToastRenderStyle.Success);
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+    }
+
+    private void Toast(string titulo, string texto, ToastRenderStyle estilo)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = "ActivoFormToast",
+            Title = titulo,
+            Text = texto,
+            RenderStyle = estilo
+        });
+
+    private static DateTime? ADateTime(DateOnly? fecha) => fecha?.ToDateTime(TimeOnly.MinValue);
+
+    private static DateOnly? ADateOnly(DateTime? fecha) => fecha.HasValue ? DateOnly.FromDateTime(fecha.Value) : null;
+}

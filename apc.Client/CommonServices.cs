@@ -28,6 +28,7 @@ using apc.Client.Services.Informes;
 using apc.Client.Services.Caja;
 using apc.Client.Services.Cobranza;
 using apc.Client.Services.TalentoHumano;
+using apc.Client.Services.ActivosFijos;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -90,6 +91,10 @@ namespace apc.Client
             services.AddScoped<EvaluacionProveedorClient>();
             services.AddScoped<RecepcionIncidenciaClient>();
             services.AddScoped<EmpleadosClient>();
+
+            // Activos Fijos F1 - registro (2026-09-08).
+            services.AddScoped<CatalogosActivosFijosClient>();
+            services.AddScoped<ActivosFijosClient>();
             services.AddScoped<CatalogosThClient>();
             services.AddScoped<SolicitudesClient>();
             services.AddScoped<MedidoresClient>();

@@ -1,0 +1,357 @@
+@page "/activos-fijos/tipos"
+@attribute [Authorize(Policy = PermissionNames.ActivosFijos.Catalogos.View)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.ActivosFijos
+@using apc.Client.Services
+@using apc.Client.Services.ActivosFijos
+
+@inject CatalogosActivosFijosClient CatalogosClient
+@inject IToastNotificationService ToastService
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Tipos de activo</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="TiposActivoToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Tipos de activo</h2>
+            <p class="page-subtitle">
+                Cada tipo presta a sus activos la vida útil, el método, el valor residual y las cuentas contables
+            </p>
+        </div>
+        <DxButton Text="Nuevo tipo" IconCssClass="bi bi-plus-lg" RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern" Click="AbrirNuevo" />
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@tipos" KeyFieldName="@nameof(TipoActivoListItemDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)" Placeholder="Buscar código o nombre..."
+                                   InputDelay="600" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                   CssClass="me-1" Style="min-width: 240px;" />
+                        <div class="d-flex align-items-center me-2">
+                            <DxCheckBox Checked="@soloActivos" CheckedChanged="@((bool v) => OnSoloActivosChanged(v))"
+                                        CheckType="CheckType.Switch">Solo activos</DxCheckBox>
+                        </div>
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" CssClass="me-1" />
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+                        <div class="ms-auto text-muted small">Total: <span class="fw-bold">@tipos.Count.ToString("N0")</span></div>
+                    </div>
+                </ToolbarTemplate>
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(TipoActivoListItemDto.Codigo)" Caption="Código" Width="110px" />
+                    <DxGridDataColumn FieldName="@nameof(TipoActivoListItemDto.Nombre)" Caption="Nombre" MinWidth="180" />
+                    <DxGridDataColumn FieldName="@nameof(TipoActivoListItemDto.PrefijoCodigo)" Caption="Prefijo" Width="100px" />
+                    <DxGridDataColumn FieldName="@nameof(TipoActivoListItemDto.VidaUtilAnios)" Caption="Vida útil" Width="110px"
+                                      DisplayFormat="N1" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="@nameof(TipoActivoListItemDto.MetodoDepreciacion)" Caption="Método" MinWidth="130" />
+                    <DxGridDataColumn FieldName="@nameof(TipoActivoListItemDto.PorcentajeResidual)" Caption="% residual" Width="110px"
+                                      DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="@nameof(TipoActivoListItemDto.CuentaActivo)" Caption="Cuenta activo" MinWidth="130" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(TipoActivoListItemDto.ActivosRegistrados)" Caption="Activos" Width="90px"
+                                      DisplayFormat="N0" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn Caption="Estado" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is TipoActivoListItemDto item)
+                            {
+                                <span class="badge-status @(item.Activo ? "active" : "inactive")">@(item.Activo ? "ACTIVO" : "INACTIVO")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Acciones" Width="120px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is TipoActivoListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => AbrirEditarAsync(item.Id)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <button type="button" class="btn-icon btn-delete" title="Desactivar"
+                                            disabled="@(!item.Activo)"
+                                            @onclick="() => ConfirmarDesactivar(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-slash-circle"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">
+                        Todavía no hay tipos de activo. Cree al menos uno antes de registrar activos.
+                    </div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="formVisible" Width="min(640px, 95vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="false"
+         HeaderText="@(modelo.Id.HasValue ? "Editar tipo de activo" : "Nuevo tipo de activo")">
+    <BodyContentTemplate Context="popupBody">
+        <div class="p-3">
+            <EditForm Model="modelo" OnValidSubmit="GuardarAsync" Context="EditFormContext">
+                <DataAnnotationsValidator />
+                <DxFormLayout>
+                    <DxFormLayoutItem Caption="Código" ColSpanMd="4">
+                        <DxTextBox @bind-Text="modelo.Codigo" NullText="MOB, VEH, COMP..." />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Nombre" ColSpanMd="8">
+                        <DxTextBox @bind-Text="modelo.Nombre" NullText="Mobiliario y equipo de oficina" />
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Prefijo del código" ColSpanMd="4">
+                        <DxTextBox @bind-Text="modelo.PrefijoCodigo" NullText="AF" />
+                        <div class="form-text">Los activos de este tipo se numerarán PREFIJO-000001.</div>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Vida útil (años)" ColSpanMd="4">
+                        <DxSpinEdit @bind-Value="modelo.VidaUtilAnios" DisplayFormat="N1" MinValue="0" Increment="0.5m" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="% valor residual" ColSpanMd="4">
+                        <DxSpinEdit @bind-Value="modelo.PorcentajeResidual" DisplayFormat="N2" MinValue="0" MaxValue="100" />
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Método de depreciación" ColSpanMd="8">
+                        <DxComboBox Data="@metodos" Value="@metodoSeleccionado" ValueExpression="@(() => metodoSeleccionado)"
+                                    ValueChanged="@((CatalogoAfDto? v) => OnMetodoSeleccionado(v))"
+                                    TextFieldName="@nameof(CatalogoAfDto.Nombre)"
+                                    TData="CatalogoAfDto" TValue="CatalogoAfDto" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Activo" ColSpanMd="4">
+                        <DxCheckBox @bind-Checked="modelo.Activo" CheckType="CheckType.Switch">
+                            @(modelo.Activo ? "Sí" : "No")
+                        </DxCheckBox>
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Descripción" ColSpanMd="12">
+                        <DxMemo @bind-Text="modelo.Descripcion" Rows="2" />
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutGroup Caption="Cuentas contables que heredan sus activos" ColSpanXs="12">
+                        <DxFormLayoutItem Caption="Cuenta del activo" ColSpanMd="6">
+                            <DxTextBox @bind-Text="modelo.CuentaActivo" />
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Depreciación acumulada" ColSpanMd="6">
+                            <DxTextBox @bind-Text="modelo.CuentaDepreciacionAcumulada" />
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Gasto por depreciación" ColSpanMd="6">
+                            <DxTextBox @bind-Text="modelo.CuentaGastoDepreciacion" />
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Pérdida en retiro o venta" ColSpanMd="6">
+                            <DxTextBox @bind-Text="modelo.CuentaPerdidaBaja" />
+                        </DxFormLayoutItem>
+                    </DxFormLayoutGroup>
+                </DxFormLayout>
+
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                    <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!isSaving)"
+                              Click="@(() => formVisible = false)" />
+                    <DxButton SubmitFormOnClick="true" Text="@(isSaving ? "Guardando..." : "Guardar")"
+                              RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!isSaving)" />
+                </div>
+            </EditForm>
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(440px, 90vw)" HeaderText="Confirmar acción" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">¿Desactivar el tipo de activo?</h5>
+            <p class="text-muted">
+                Dejará de aparecer al registrar activos nuevos. Los @(paraDesactivar?.ActivosRegistrados.ToString("N0") ?? "0")
+                activos que ya lo usan no se tocan.
+            </p>
+            @if (paraDesactivar is not null)
+            {
+                <div class="fw-semibold">@paraDesactivar.Codigo — @paraDesactivar.Nombre</div>
+            }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar" Click="@(() => confirmVisible = false)"
+                          RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Sí, desactivar" Click="DesactivarConfirmadoAsync"
+                          RenderStyle="ButtonRenderStyle.Danger" IconCssClass="bi bi-slash-circle" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private DxGrid? grid;
+    private List<TipoActivoListItemDto> tipos = new();
+    private List<CatalogoAfDto> metodos = new();
+
+    private string filtroBusqueda = string.Empty;
+    private bool soloActivos = true;
+    private bool isLoading;
+    private string? errorMessage;
+
+    private bool formVisible, isSaving;
+    private TipoActivoEditDto modelo = new();
+    private CatalogoAfDto? metodoSeleccionado;
+
+    private bool confirmVisible;
+    private TipoActivoListItemDto? paraDesactivar;
+
+    private const string GridLayoutStorageKey = "activos-fijos-tipos-grid-layout";
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var todos = await CatalogosClient.GetMetodosDepreciacionAsync();
+            var disponibles = new List<CatalogoAfDto>();
+            foreach (var m in todos)
+            {
+                if (m.Implementado) disponibles.Add(m);
+            }
+            metodos = disponibles;
+        }
+        catch { metodos = new(); }
+
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            tipos = await CatalogosClient.GetTiposAsync(soloActivos ? true : null, filtroBusqueda);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudieron cargar los tipos de activo: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnBusquedaChanged(string v) { filtroBusqueda = v; await CargarAsync(); }
+    private async Task OnSoloActivosChanged(bool v) { soloActivos = v; await CargarAsync(); }
+
+    private void AbrirNuevo()
+    {
+        modelo = new TipoActivoEditDto { MetodoDepreciacionId = 1, Activo = true };
+        metodoSeleccionado = BuscarMetodo(modelo.MetodoDepreciacionId);
+        formVisible = true;
+    }
+
+    private async Task AbrirEditarAsync(int id)
+    {
+        try
+        {
+            var dto = await CatalogosClient.GetTipoByIdAsync(id);
+            if (dto is null)
+            {
+                Toast("Error", "No se encontró el tipo de activo.", ToastRenderStyle.Danger);
+                return;
+            }
+
+            modelo = dto;
+            metodoSeleccionado = BuscarMetodo(modelo.MetodoDepreciacionId);
+            formVisible = true;
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+    }
+
+    private CatalogoAfDto? BuscarMetodo(short id)
+    {
+        foreach (var m in metodos) { if (m.Id == id) return m; }
+        return null;
+    }
+
+    private void OnMetodoSeleccionado(CatalogoAfDto? v)
+    {
+        metodoSeleccionado = v;
+        modelo.MetodoDepreciacionId = v?.Id ?? 1;
+    }
+
+    private async Task GuardarAsync()
+    {
+        isSaving = true;
+        try
+        {
+            await CatalogosClient.GuardarTipoAsync(modelo);
+            formVisible = false;
+            Toast("Éxito", "Tipo de activo guardado.", ToastRenderStyle.Success);
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ConfirmarDesactivar(TipoActivoListItemDto item)
+    {
+        paraDesactivar = item;
+        confirmVisible = true;
+    }
+
+    private async Task DesactivarConfirmadoAsync()
+    {
+        if (paraDesactivar is null) { confirmVisible = false; return; }
+        try
+        {
+            await CatalogosClient.DesactivarTipoAsync(paraDesactivar.Id);
+            Toast("Éxito", "Tipo de activo desactivado.", ToastRenderStyle.Success);
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            confirmVisible = false;
+            paraDesactivar = null;
+        }
+    }
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = "TiposActivoToast" });
+}

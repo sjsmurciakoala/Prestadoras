@@ -1,0 +1,344 @@
+@page "/activos-fijos/ubicaciones"
+@attribute [Authorize(Policy = PermissionNames.ActivosFijos.Catalogos.View)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.ActivosFijos
+@using apc.Client.Services
+@using apc.Client.Services.ActivosFijos
+
+@inject CatalogosActivosFijosClient CatalogosClient
+@inject IToastNotificationService ToastService
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Ubicaciones de activos</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="UbicacionesActivoToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Ubicaciones</h2>
+            <p class="page-subtitle">Dónde está físicamente cada activo, en tantos niveles como haga falta</p>
+        </div>
+        <DxButton Text="Nueva ubicación" IconCssClass="bi bi-plus-lg" RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern" Click="AbrirNuevo" />
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@ubicaciones" KeyFieldName="@nameof(UbicacionActivoListItemDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)" Placeholder="Buscar código, nombre o ruta..."
+                                   InputDelay="600" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                   CssClass="me-1" Style="min-width: 250px;" />
+                        <div class="d-flex align-items-center me-2">
+                            <DxCheckBox Checked="@soloActivos" CheckedChanged="@((bool v) => OnSoloActivosChanged(v))"
+                                        CheckType="CheckType.Switch">Solo activas</DxCheckBox>
+                        </div>
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" CssClass="me-1" />
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+                        <div class="ms-auto text-muted small">Total: <span class="fw-bold">@ubicaciones.Count.ToString("N0")</span></div>
+                    </div>
+                </ToolbarTemplate>
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(UbicacionActivoListItemDto.Codigo)" Caption="Código" Width="110px" />
+                    <DxGridDataColumn FieldName="@nameof(UbicacionActivoListItemDto.Ruta)" Caption="Ubicación" MinWidth="260" />
+                    <DxGridDataColumn FieldName="@nameof(UbicacionActivoListItemDto.PadreNombre)" Caption="Contenida en" MinWidth="150">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is UbicacionActivoListItemDto item)
+                            {
+                                <span class="@(string.IsNullOrWhiteSpace(item.PadreNombre) ? "text-muted fst-italic" : "")">
+                                    @(string.IsNullOrWhiteSpace(item.PadreNombre) ? "Nivel raíz" : item.PadreNombre)
+                                </span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(UbicacionActivoListItemDto.Responsable)" Caption="Responsable" MinWidth="140" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(UbicacionActivoListItemDto.Direccion)" Caption="Dirección" MinWidth="180" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(UbicacionActivoListItemDto.ActivosRegistrados)" Caption="Activos" Width="90px"
+                                      DisplayFormat="N0" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn Caption="Estado" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is UbicacionActivoListItemDto item)
+                            {
+                                <span class="badge-status @(item.Activo ? "active" : "inactive")">@(item.Activo ? "ACTIVA" : "INACTIVA")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Acciones" Width="120px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is UbicacionActivoListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => AbrirEditarAsync(item.Id)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <button type="button" class="btn-icon btn-delete" title="Desactivar"
+                                            disabled="@(!item.Activo)"
+                                            @onclick="() => ConfirmarDesactivar(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-slash-circle"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">Todavía no hay ubicaciones registradas.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="formVisible" Width="min(560px, 95vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="false"
+         HeaderText="@(modelo.Id.HasValue ? "Editar ubicación" : "Nueva ubicación")">
+    <BodyContentTemplate Context="popupBody">
+        <div class="p-3">
+            <EditForm Model="modelo" OnValidSubmit="GuardarAsync" Context="EditFormContext">
+                <DataAnnotationsValidator />
+                <DxFormLayout>
+                    <DxFormLayoutItem Caption="Código" ColSpanMd="4">
+                        <DxTextBox @bind-Text="modelo.Codigo" NullText="OF-01" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Nombre" ColSpanMd="8">
+                        <DxTextBox @bind-Text="modelo.Nombre" NullText="Oficina central" />
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Contenida en" ColSpanMd="12">
+                        <DxComboBox Data="@padresDisponibles" Value="@padreSeleccionado" ValueExpression="@(() => padreSeleccionado)"
+                                    ValueChanged="@((UbicacionActivoListItemDto? v) => OnPadreSeleccionado(v))"
+                                    TextFieldName="@nameof(UbicacionActivoListItemDto.Ruta)"
+                                    NullText="Nivel raíz (no está dentro de otra)"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    TData="UbicacionActivoListItemDto" TValue="UbicacionActivoListItemDto" />
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Dirección" ColSpanMd="12">
+                        <DxTextBox @bind-Text="modelo.Direccion" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Responsable del lugar" ColSpanMd="8">
+                        <DxTextBox @bind-Text="modelo.Responsable" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Activa" ColSpanMd="4">
+                        <DxCheckBox @bind-Checked="modelo.Activo" CheckType="CheckType.Switch">
+                            @(modelo.Activo ? "Sí" : "No")
+                        </DxCheckBox>
+                    </DxFormLayoutItem>
+                </DxFormLayout>
+
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                    <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!isSaving)"
+                              Click="@(() => formVisible = false)" />
+                    <DxButton SubmitFormOnClick="true" Text="@(isSaving ? "Guardando..." : "Guardar")"
+                              RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!isSaving)" />
+                </div>
+            </EditForm>
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(440px, 90vw)" HeaderText="Confirmar acción" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">¿Desactivar la ubicación?</h5>
+            <p class="text-muted">Dejará de ofrecerse al registrar activos. Los activos que ya la usan no se tocan.</p>
+            @if (paraDesactivar is not null)
+            {
+                <div class="fw-semibold">@paraDesactivar.Codigo — @paraDesactivar.Nombre</div>
+            }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar" Click="@(() => confirmVisible = false)"
+                          RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Sí, desactivar" Click="DesactivarConfirmadoAsync"
+                          RenderStyle="ButtonRenderStyle.Danger" IconCssClass="bi bi-slash-circle" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private DxGrid? grid;
+    private List<UbicacionActivoListItemDto> ubicaciones = new();
+    private List<UbicacionActivoListItemDto> padresDisponibles = new();
+
+    private string filtroBusqueda = string.Empty;
+    private bool soloActivos = true;
+    private bool isLoading;
+    private string? errorMessage;
+
+    private bool formVisible, isSaving;
+    private UbicacionActivoEditDto modelo = new();
+    private UbicacionActivoListItemDto? padreSeleccionado;
+
+    private bool confirmVisible;
+    private UbicacionActivoListItemDto? paraDesactivar;
+
+    private const string GridLayoutStorageKey = "activos-fijos-ubicaciones-grid-layout";
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            ubicaciones = await CatalogosClient.GetUbicacionesAsync(soloActivos ? true : null, filtroBusqueda);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudieron cargar las ubicaciones: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnBusquedaChanged(string v) { filtroBusqueda = v; await CargarAsync(); }
+    private async Task OnSoloActivosChanged(bool v) { soloActivos = v; await CargarAsync(); }
+
+    private async Task AbrirNuevo()
+    {
+        modelo = new UbicacionActivoEditDto { Activo = true };
+        padreSeleccionado = null;
+        await CargarPadresAsync(null);
+        formVisible = true;
+    }
+
+    private async Task AbrirEditarAsync(int id)
+    {
+        try
+        {
+            var dto = await CatalogosClient.GetUbicacionByIdAsync(id);
+            if (dto is null)
+            {
+                Toast("Error", "No se encontró la ubicación.", ToastRenderStyle.Danger);
+                return;
+            }
+
+            modelo = dto;
+            await CargarPadresAsync(id);
+            padreSeleccionado = BuscarPadre(modelo.PadreId);
+            formVisible = true;
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+    }
+
+    /// <summary>
+    /// Candidatas a contenedora: todas menos la que se edita. El ciclo más profundo
+    /// (A dentro de B dentro de A) lo rechaza el procedimiento de guardado.
+    /// </summary>
+    private async Task CargarPadresAsync(int? excluirId)
+    {
+        try
+        {
+            var todas = await CatalogosClient.GetUbicacionesAsync(true, null);
+            var candidatas = new List<UbicacionActivoListItemDto>();
+            foreach (var u in todas)
+            {
+                if (excluirId is null || u.Id != excluirId.Value) candidatas.Add(u);
+            }
+            padresDisponibles = candidatas;
+        }
+        catch
+        {
+            padresDisponibles = new();
+        }
+    }
+
+    private UbicacionActivoListItemDto? BuscarPadre(int? id)
+    {
+        if (id is null) return null;
+        foreach (var u in padresDisponibles) { if (u.Id == id.Value) return u; }
+        return null;
+    }
+
+    private void OnPadreSeleccionado(UbicacionActivoListItemDto? v)
+    {
+        padreSeleccionado = v;
+        modelo.PadreId = v?.Id;
+    }
+
+    private async Task GuardarAsync()
+    {
+        isSaving = true;
+        try
+        {
+            await CatalogosClient.GuardarUbicacionAsync(modelo);
+            formVisible = false;
+            Toast("Éxito", "Ubicación guardada.", ToastRenderStyle.Success);
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ConfirmarDesactivar(UbicacionActivoListItemDto item)
+    {
+        paraDesactivar = item;
+        confirmVisible = true;
+    }
+
+    private async Task DesactivarConfirmadoAsync()
+    {
+        if (paraDesactivar is null) { confirmVisible = false; return; }
+        try
+        {
+            await CatalogosClient.DesactivarUbicacionAsync(paraDesactivar.Id);
+            Toast("Éxito", "Ubicación desactivada.", ToastRenderStyle.Success);
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            confirmVisible = false;
+            paraDesactivar = null;
+        }
+    }
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = "UbicacionesActivoToast" });
+}

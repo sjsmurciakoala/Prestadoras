@@ -325,7 +325,45 @@ public static class SidebarNavigationDefinition
             ]
         },
 
-        // ===== 5. CONFIGURACIÓN (al final, decisión del usuario 2026-08-05) (TODOS los mantenimientos + admin del sistema) =====
+        // ===== 5. ACTIVOS FIJOS (2026-09-08) =====
+        // Sección propia, no un submenú de Inventario: un activo fijo no es existencia de
+        // bodega. Comparte prefijo af_ en la base y catálogos propios (tipos y ubicaciones).
+        new SidebarNavSection
+        {
+            Id = "activos-fijos",
+            Label = "Activos fijos",
+            Items =
+            [
+                new SidebarNavItem
+                {
+                    Id = "af-registro",
+                    RequiredPermission = PermissionNames.ActivosFijos.Activos.View,
+                    Text = "Registro de activos",
+                    IconCssClass = "bi bi-box-seam",
+                    MatchPrefixes = ["/activos-fijos/activos"],
+                    Children =
+                    [
+                        new SidebarNavItem { Id = "af-activos", RequiredPermission = PermissionNames.ActivosFijos.Activos.View, Text = "Activos", NavigateUrl = "/activos-fijos/activos", MatchPrefixes = ["/activos-fijos/activos"], MatchExact = true, IconCssClass = "bi bi-box-seam" },
+                        new SidebarNavItem { Id = "af-activo-nuevo", RequiredPermission = PermissionNames.ActivosFijos.Activos.Create, Text = "Nuevo activo", NavigateUrl = "/activos-fijos/activos/nuevo", MatchPrefixes = ["/activos-fijos/activos/nuevo"], IconCssClass = "bi bi-plus-circle" }
+                    ]
+                },
+                new SidebarNavItem
+                {
+                    Id = "af-catalogos",
+                    RequiredPermission = PermissionNames.ActivosFijos.Catalogos.View,
+                    Text = "Catálogos",
+                    IconCssClass = "bi bi-journal-bookmark",
+                    MatchPrefixes = ["/activos-fijos/tipos", "/activos-fijos/ubicaciones"],
+                    Children =
+                    [
+                        new SidebarNavItem { Id = "af-tipos", RequiredPermission = PermissionNames.ActivosFijos.Catalogos.View, Text = "Tipos de activo", NavigateUrl = "/activos-fijos/tipos", MatchPrefixes = ["/activos-fijos/tipos"], IconCssClass = "bi bi-tags" },
+                        new SidebarNavItem { Id = "af-ubicaciones", RequiredPermission = PermissionNames.ActivosFijos.Catalogos.View, Text = "Ubicaciones", NavigateUrl = "/activos-fijos/ubicaciones", MatchPrefixes = ["/activos-fijos/ubicaciones"], IconCssClass = "bi bi-geo-alt" }
+                    ]
+                }
+            ]
+        },
+
+        // ===== 6. CONFIGURACIÓN (al final, decisión del usuario 2026-08-05) (TODOS los mantenimientos + admin del sistema) =====
         new SidebarNavSection
         {
             Id = "configuracion",

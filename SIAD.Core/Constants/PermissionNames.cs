@@ -18,6 +18,11 @@ public static class PermissionModules
     // "Recibe" del Descargo de almacén.
     public const string TalentoHumano = "talentohumano";
 
+    // Activos Fijos (2026-09-08): maestro de activos, catálogos propios y, en fases
+    // siguientes, depreciación y bajas. Módulo aparte de inventario: un activo fijo no
+    // es existencia de bodega, aunque el histórico migrado de SIMAFI viviera junto a él.
+    public const string ActivosFijos = "activosfijos";
+
     public static readonly string[] All =
     [
         Ventas,
@@ -28,7 +33,8 @@ public static class PermissionModules
         Contabilidad,
         Reporteria,
         Configuracion,
-        TalentoHumano
+        TalentoHumano,
+        ActivosFijos
     ];
 }
 
@@ -188,6 +194,17 @@ public static class PermissionResources
         // aparte de `evaluacion` porque quien las registra es quien RECIBE la mercadería
         // (almacén), no necesariamente quien califica al proveedor.
         public const string Incidencias = "incidencias";
+    }
+
+    public static class ActivosFijos
+    {
+        // Maestro de activos: el registro, la ficha y la reasignación de responsable.
+        public const string Activos = "activos";
+
+        // Catálogos del módulo (tipos de activo y ubicaciones). Recurso aparte del maestro
+        // porque el tipo de activo lleva las cuentas contables y la vida útil que heredan
+        // TODOS sus activos: configurarlo pesa más que registrar un activo con él.
+        public const string Catalogos = "catalogos";
     }
 }
 
@@ -493,6 +510,43 @@ public static class PermissionNames
         public const string Delete = "module.talentohumano.delete";
     }
 
+    /// <summary>
+    /// Activos Fijos (2026-09-08). Módulo nuevo, sin permiso legacy previo.
+    /// </summary>
+    public static class ActivosFijos
+    {
+        public const string View = "module.activosfijos.view";
+        public const string Create = "module.activosfijos.create";
+        public const string Edit = "module.activosfijos.edit";
+        public const string Delete = "module.activosfijos.delete";
+
+        /// <summary>Maestro de activos: registro, ficha y reasignación de responsable.</summary>
+        public static class Activos
+        {
+            public const string View = "module.activosfijos.activos.view";
+            public const string Create = "module.activosfijos.activos.create";
+            public const string Edit = "module.activosfijos.activos.edit";
+
+            /// <summary>
+            /// Reasignar el activo (responsable, ubicación, centro de costo). Se concede
+            /// aparte de Edit: quien lleva el control físico del inventario reasigna, pero
+            /// no necesariamente cambia valores de compra ni cuentas contables.
+            /// </summary>
+            public const string Asignar = "module.activosfijos.activos.asignar";
+        }
+
+        /// <summary>
+        /// Tipos de activo y ubicaciones. Sin <c>Delete</c>: un tipo no se borra, se
+        /// desactiva — borrarlo dejaría huérfanos los activos que lo referencian.
+        /// </summary>
+        public static class Catalogos
+        {
+            public const string View = "module.activosfijos.catalogos.view";
+            public const string Create = "module.activosfijos.catalogos.create";
+            public const string Edit = "module.activosfijos.catalogos.edit";
+        }
+    }
+
     public static class Configuracion
     {
         public const string View = "module.configuracion.view";
@@ -608,6 +662,18 @@ public static class PermissionNames
             TalentoHumano.Create,
             TalentoHumano.Edit,
             TalentoHumano.Delete,
+
+            ActivosFijos.View,
+            ActivosFijos.Create,
+            ActivosFijos.Edit,
+            ActivosFijos.Delete,
+            ActivosFijos.Activos.View,
+            ActivosFijos.Activos.Create,
+            ActivosFijos.Activos.Edit,
+            ActivosFijos.Activos.Asignar,
+            ActivosFijos.Catalogos.View,
+            ActivosFijos.Catalogos.Create,
+            ActivosFijos.Catalogos.Edit,
 
             Ventas.Clientes.View,
             Ventas.Clientes.Create,
@@ -746,6 +812,20 @@ public static class PermissionNames
         new PermissionPolicyDefinition(TalentoHumano.Create, [TalentoHumano.Create]),
         new PermissionPolicyDefinition(TalentoHumano.Edit, [TalentoHumano.Edit]),
         new PermissionPolicyDefinition(TalentoHumano.Delete, [TalentoHumano.Delete]),
+
+        // Activos Fijos: módulo nuevo, sin permiso legacy previo. Los recursos finos
+        // caen al permiso de módulo, igual que en el resto del portal.
+        new PermissionPolicyDefinition(ActivosFijos.View, [ActivosFijos.View]),
+        new PermissionPolicyDefinition(ActivosFijos.Create, [ActivosFijos.Create]),
+        new PermissionPolicyDefinition(ActivosFijos.Edit, [ActivosFijos.Edit]),
+        new PermissionPolicyDefinition(ActivosFijos.Delete, [ActivosFijos.Delete]),
+        new PermissionPolicyDefinition(ActivosFijos.Activos.View, [ActivosFijos.Activos.View, ActivosFijos.View]),
+        new PermissionPolicyDefinition(ActivosFijos.Activos.Create, [ActivosFijos.Activos.Create, ActivosFijos.Create]),
+        new PermissionPolicyDefinition(ActivosFijos.Activos.Edit, [ActivosFijos.Activos.Edit, ActivosFijos.Edit]),
+        new PermissionPolicyDefinition(ActivosFijos.Activos.Asignar, [ActivosFijos.Activos.Asignar, ActivosFijos.Edit]),
+        new PermissionPolicyDefinition(ActivosFijos.Catalogos.View, [ActivosFijos.Catalogos.View, ActivosFijos.View]),
+        new PermissionPolicyDefinition(ActivosFijos.Catalogos.Create, [ActivosFijos.Catalogos.Create, ActivosFijos.Create]),
+        new PermissionPolicyDefinition(ActivosFijos.Catalogos.Edit, [ActivosFijos.Catalogos.Edit, ActivosFijos.Edit]),
 
         new PermissionPolicyDefinition(Ventas.Clientes.View, [Ventas.Clientes.View, Ventas.View, Legacy.Ventas]),
         new PermissionPolicyDefinition(Ventas.Clientes.Create, [Ventas.Clientes.Create, Ventas.Create]),
