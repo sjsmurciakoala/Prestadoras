@@ -152,12 +152,15 @@ public sealed class CatalogosActivosFijosController : ControllerBase
     }
 
     /// <summary>
-    /// Las reglas de negocio viven en los procedimientos de Postgres y llegan como
-    /// <c>RAISE EXCEPTION</c>. Se traducen a 400 con el mensaje tal cual, que ya está
-    /// redactado para el usuario final.
+    /// Solo los <c>RAISE EXCEPTION</c> de los procedimientos, que llegan con SqlState P0001,
+    /// traen un mensaje escrito para el usuario. Cualquier otro error de Postgres (llave
+    /// duplicada, valor demasiado largo, bloqueo) es un fallo técnico: se deja subir para que
+    /// salga como 500 y quede en el registro, en vez de disfrazarlo de validación con su
+    /// texto interno en pantalla.
     /// </summary>
     internal static bool EsErrorDeNegocio(Exception ex)
-        => ex is InvalidOperationException || ex is Npgsql.PostgresException;
+        => ex is InvalidOperationException
+           || (ex is Npgsql.PostgresException pg && pg.SqlState == "P0001");
 
     internal static string MensajeNegocio(Exception ex)
         => ex is Npgsql.PostgresException pg ? pg.MessageText : ex.Message;

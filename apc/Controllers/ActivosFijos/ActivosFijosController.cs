@@ -76,7 +76,13 @@ public sealed class ActivosFijosController : ControllerBase
     /// Reasignar responsable, ubicación o centro de costo. Permiso propio: quien lleva el
     /// control físico del inventario reasigna sin poder tocar valores ni cuentas contables.
     /// </summary>
+    /// <remarks>
+    /// Lleva su propio <see cref="ModuleAuthorizeAttribute"/> con acción Edit para ANULAR el
+    /// de la clase: sin él, el POST se resolvía como Create y exigía además el permiso de
+    /// alta, con lo que un rol de control físico con view y asignar recibía 403.
+    /// </remarks>
     [HttpPost("{id:int}/asignaciones")]
+    [ModuleAuthorize(PermissionModules.ActivosFijos, PermissionResources.ActivosFijos.Activos, PermissionAction.Edit)]
     [Authorize(Policy = PermissionNames.ActivosFijos.Activos.Asignar)]
     public async Task<IActionResult> Asignar(int id, [FromBody] ActivoAsignacionRequestDto dto, CancellationToken ct)
     {

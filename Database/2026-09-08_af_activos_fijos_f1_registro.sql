@@ -262,8 +262,14 @@ ALTER TABLE af_activo_fijo ALTER COLUMN valor_rescate   TYPE NUMERIC(14,2);
 ALTER TABLE af_activo_fijo ALTER COLUMN vida_util_anios TYPE NUMERIC(4,1);
 ALTER TABLE af_activo_fijo ALTER COLUMN valor_venta     TYPE NUMERIC(14,2);
 
+--   vida_util_periodos NUMERIC(3,0) -> tope 999 meses, es decir 83 años. Un edificio
+--                                    a 100 años es una vida útil corriente y reventaba
+--                                    con "numeric field overflow" al guardar.
+ALTER TABLE af_activo_fijo ALTER COLUMN vida_util_periodos TYPE NUMERIC(5,0);
+
 COMMENT ON COLUMN af_activo_fijo.valor_rescate IS 'Valor residual estimado al final de la vida útil. Ampliado de NUMERIC(7,2) a NUMERIC(14,2) el 2026-09-08: el tope heredado de SIMAFI (L. 99,999.99) no admitía el residual de un vehículo o de maquinaria.';
 COMMENT ON COLUMN af_activo_fijo.vida_util_anios IS 'Vida útil en años. Ampliado de NUMERIC(3,0) a NUMERIC(4,1) el 2026-09-08 para admitir medios años (2.5, 7.5).';
+COMMENT ON COLUMN af_activo_fijo.vida_util_periodos IS 'Vida útil en meses, derivada de vida_util_anios por el SP de guardado. Ampliado de NUMERIC(3,0) a NUMERIC(5,0) el 2026-09-08: el tope de 999 meses dejaba fuera cualquier vida útil mayor a 83 años.';
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 5. ACCESO A DATOS: funciones y procedimientos
@@ -376,6 +382,15 @@ BEGIN
     IF v_codigo = '' THEN RAISE EXCEPTION 'El código del tipo de activo es obligatorio.'; END IF;
     IF v_nombre = '' THEN RAISE EXCEPTION 'El nombre del tipo de activo es obligatorio.'; END IF;
 
+    -- El prefijo se interpola en la expresión regular que busca el último correlativo
+    -- (fn_af_activo_siguiente_codigo). Un metacarácter como . + * [ o ^ haría que la
+    -- numeración contara códigos de otro tipo y repitiera correlativos en silencio.
+    IF p_prefijo_codigo IS NOT NULL
+       AND btrim(p_prefijo_codigo) <> ''
+       AND btrim(p_prefijo_codigo) !~ '^[A-Za-z0-9]+$' THEN
+        RAISE EXCEPTION 'El prefijo solo admite letras y números, sin espacios ni signos.';
+    END IF;
+
     IF p_vida_util_anios IS NOT NULL AND p_vida_util_anios <= 0 THEN
         RAISE EXCEPTION 'La vida útil debe ser mayor que cero.';
     END IF;
@@ -467,7 +482,7 @@ LANGUAGE sql STABLE AS $$
              WHERE af.company_id = u.company_id AND af.ubicacion_id = u.id)
       FROM public.af_ubicacion u
       JOIN arbol a                    ON a.id = u.id
-      LEFT JOIN public.af_ubicacion p ON p.id = u.padre_id
+      LEFT JOIN public.af_ubicacion p ON p.company_id = u.company_id AND p.id = u.padre_id
      WHERE u.company_id = p_company_id
        AND (p_solo_activos IS NULL OR u.activo = p_solo_activos)
        AND (p_search IS NULL OR u.codigo ILIKE p_search OR u.nombre ILIKE p_search
@@ -689,7 +704,8 @@ LANGUAGE sql STABLE AS $$
       LEFT JOIN public.af_tipo_activo   t  ON t.company_id = a.company_id AND t.id = a.tipo_activo_id
       LEFT JOIN public.af_estado_activo e  ON e.id = a.estado_activo_id
       LEFT JOIN public.af_ubicacion     u  ON u.company_id = a.company_id AND u.id = a.ubicacion_id
-      LEFT JOIN public.prv_proveedores   pr ON pr.cod_proveedor = a.cod_proveedor
+      LEFT JOIN public.prv_proveedores   pr ON pr.company_id = a.company_id
+                                            AND pr.cod_proveedor = a.cod_proveedor
       LEFT JOIN public.con_centro_costo cc ON cc.company_id = a.company_id AND cc.cost_center_id = a.centro_costo_id
      WHERE a.company_id = p_company_id AND a.id = p_id;
 $$;
@@ -755,7 +771,7 @@ LANGUAGE plpgsql AS $$
 DECLARE
     v_tipo            RECORD;
     v_estado          RECORD;
-    v_es_nuevo        BOOLEAN := (p_id IS NULL OR p_id <= 0);
+    v_es_nuevo        BOOLEAN := (p_id IS NULL OR p_id = 0);
     v_codigo          VARCHAR := upper(btrim(coalesce(p_codigo_activo, '')));
     v_descripcion     VARCHAR := btrim(coalesce(p_descripcion, ''));
     v_barra           VARCHAR := nullif(upper(btrim(coalesce(p_codigo_barra, ''))), '');
@@ -768,6 +784,7 @@ DECLARE
     v_mensual         NUMERIC := 0;
     v_diaria          NUMERIC := 0;
     v_periodos        NUMERIC;
+    v_anual           NUMERIC := 0;
     v_inicio          DATE;
     v_fin             DATE;
     v_responsable     VARCHAR := nullif(btrim(coalesce(p_responsable, '')), '');
@@ -779,6 +796,11 @@ DECLARE
     v_asig            RECORD;
 BEGIN
     -- ── Validaciones de negocio ──────────────────────────────────────────────
+    -- Un id negativo era tratado como alta y creaba un registro en silencio.
+    IF p_id IS NOT NULL AND p_id < 0 THEN
+        RAISE EXCEPTION 'El identificador del activo no es válido.';
+    END IF;
+
     IF v_descripcion = '' THEN
         RAISE EXCEPTION 'La descripción del activo es obligatoria.';
     END IF;
@@ -854,6 +876,13 @@ BEGIN
 
     v_a_depreciar := v_compra - v_rescate;
 
+    -- OJO CON valor_a_depreciar. Pese al nombre, el histórico de SIMAFI guarda ahí la
+    -- CUOTA ANUAL, no la base depreciable: 827 de las 829 filas migradas cumplen
+    -- valor_a_depreciar = depreciacion_mensual * 12. Se respeta esa semántica para que
+    -- la columna signifique lo mismo en las 830 filas y el motor de la Fase 2 pueda
+    -- leerla sin distinguir el origen. La base depreciable no se almacena: es
+    -- valor_compra - valor_rescate y se deriva cuando hace falta.
+
     IF v_acumulada < 0 THEN
         RAISE EXCEPTION 'La depreciación acumulada no puede ser negativa.';
     END IF;
@@ -881,22 +910,29 @@ BEGIN
 
     IF p_cod_proveedor IS NOT NULL AND btrim(p_cod_proveedor) <> ''
        AND NOT EXISTS (SELECT 1 FROM public.prv_proveedores pr
-                        WHERE pr.cod_proveedor = btrim(p_cod_proveedor)) THEN
+                        WHERE pr.company_id = p_company_id
+                          AND pr.cod_proveedor = btrim(p_cod_proveedor)) THEN
         RAISE EXCEPTION 'El proveedor seleccionado no existe.';
     END IF;
 
     -- ── Derivados de depreciación (línea recta) ──────────────────────────────
     IF v_vida IS NOT NULL AND v_vida > 0 THEN
-        v_periodos := round(v_vida * 12);
-        v_mensual  := round(v_a_depreciar / (v_vida * 12), 2);
+        -- Los períodos salen de la MISMA cuenta que la cuota, sin redondear antes: con
+        -- vidas decimales (3.7 años) redondear primero dejaba un resto sin depreciar al
+        -- llegar a la fecha de fin que muestra la ficha.
+        v_periodos := v_vida * 12;
+        v_mensual  := round(v_a_depreciar / v_periodos, 2);
         v_diaria   := round(v_a_depreciar / (v_vida * 365), 2);
-        v_fin      := (v_inicio + (v_periodos::INTEGER * INTERVAL '1 month'))::DATE;
+        v_fin      := (v_inicio + (round(v_periodos)::INTEGER * INTERVAL '1 month'))::DATE;
+        v_anual    := round(v_mensual * 12, 2);
     END IF;
 
     -- Cuentas: las del activo mandan; si vienen vacías, hereda las del tipo.
-    v_cuenta_activo := coalesce(nullif(btrim(coalesce(p_cuenta_contable, '')), ''),     v_tipo.cuenta_activo);
-    v_cuenta_dep    := coalesce(nullif(btrim(coalesce(p_cuenta_depreciacion, '')), ''), v_tipo.cuenta_depreciacion_acumulada);
-    v_cuenta_gasto  := coalesce(nullif(btrim(coalesce(p_cuenta_gasto, '')), ''),        v_tipo.cuenta_gasto_depreciacion);
+    -- Las columnas del activo son VARCHAR(25) (heredadas de SIMAFI) y las del tipo
+    -- VARCHAR(30): se truncan al copiarlas para no reventar con "valor demasiado largo".
+    v_cuenta_activo := left(coalesce(nullif(btrim(coalesce(p_cuenta_contable, '')), ''),     v_tipo.cuenta_activo), 25);
+    v_cuenta_dep    := left(coalesce(nullif(btrim(coalesce(p_cuenta_depreciacion, '')), ''), v_tipo.cuenta_depreciacion_acumulada), 25);
+    v_cuenta_gasto  := left(coalesce(nullif(btrim(coalesce(p_cuenta_gasto, '')), ''),        v_tipo.cuenta_gasto_depreciacion), 25);
 
     -- El nombre del responsable se copia del catálogo cuando se eligió de ahí.
     IF p_empleado_id IS NOT NULL THEN
@@ -954,8 +990,8 @@ BEGIN
                 nullif(btrim(coalesce(p_cod_proveedor, '')), ''),
                 p_centro_costo_id, p_marca, p_modelo, p_serie, p_placa, v_barra, p_numero_factura,
                 p_fecha_compra, v_inicio, v_fin,
-                v_compra, v_rescate, v_vida, v_periodos,
-                coalesce(p_depreciar, false), v_a_depreciar, v_acumulada, v_acumulada,
+                v_compra, v_rescate, v_vida, round(v_periodos),
+                coalesce(p_depreciar, false), v_anual, v_acumulada, v_acumulada,
                 v_mensual, v_diaria, v_compra - v_acumulada,
                 v_cuenta_activo, v_cuenta_dep, v_cuenta_gasto,
                 p_poliza_seguro, p_poliza_vence, p_garantia_vence,
@@ -978,9 +1014,9 @@ BEGIN
                fecha_compra = p_fecha_compra, fecha_inicio_depreciacion = v_inicio,
                fecha_fin_depreciacion = v_fin,
                valor_compra = v_compra, valor_rescate = v_rescate,
-               vida_util_anios = v_vida, vida_util_periodos = v_periodos,
+               vida_util_anios = v_vida, vida_util_periodos = round(v_periodos),
                depreciar = coalesce(p_depreciar, false),
-               valor_a_depreciar = v_a_depreciar,
+               valor_a_depreciar = v_anual,
                depreciacion_acumulada = v_acumulada, valor_depreciado = v_acumulada,
                depreciacion_mensual = v_mensual, depreciacion_diaria = v_diaria,
                valor_libros = v_compra - v_acumulada,
@@ -1100,6 +1136,21 @@ BEGIN
         END IF;
     END IF;
 
+    -- La FK de af_ubicacion garantiza que la ubicación exista, NO que sea de esta
+    -- empresa. Sin esta comprobación se podía cruzar un activo con la ubicación de otro
+    -- tenant y el dato quedaba invisible, porque las lecturas sí filtran.
+    IF p_ubicacion_id IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM public.af_ubicacion u
+                        WHERE u.company_id = p_company_id AND u.id = p_ubicacion_id) THEN
+        RAISE EXCEPTION 'La ubicación seleccionada no existe.';
+    END IF;
+
+    IF p_centro_costo_id IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM public.con_centro_costo cc
+                        WHERE cc.company_id = p_company_id AND cc.cost_center_id = p_centro_costo_id) THEN
+        RAISE EXCEPTION 'El centro de costo seleccionado no existe.';
+    END IF;
+
     SELECT s.* INTO v_vigente
       FROM public.af_activo_asignacion s
      WHERE s.company_id = p_company_id AND s.activo_fijo_id = p_activo_fijo_id
@@ -1125,7 +1176,10 @@ BEGIN
            responsable = left(v_responsable, 80),
            cargo_responsable = left(v_cargo, 50),
            ubicacion_id = p_ubicacion_id,
-           centro_costo_id = p_centro_costo_id,
+           -- El popup de reasignación no pide centro de costo (decisión D3), así que
+           -- llega siempre NULL: sin este coalesce, cambiar de responsable borraba el
+           -- centro de costo que es justo el insumo de la Fase 2.
+           centro_costo_id = coalesce(p_centro_costo_id, a.centro_costo_id),
            fecha_asignacion = v_fecha,
            usuariomodificacion = p_usuario,
            fechamodificacion = v_ahora

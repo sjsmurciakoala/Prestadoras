@@ -2,10 +2,11 @@
 
 **Base destino:** `siad_v4` @ `172.16.0.9`
 **Fecha:** 2026-09-08
-**Alcance:** 3 scripts, 3 pasos.
+**Alcance:** 4 scripts, 4 pasos.
 **Scripts:** [2026-09-08_af_activos_fijos_f1_registro.sql](2026-09-08_af_activos_fijos_f1_registro.sql),
 [2026-09-08_af_semilla_catalogos_ejemplo.sql](2026-09-08_af_semilla_catalogos_ejemplo.sql)
-y [2026-09-08_af_rol_permisos.sql](2026-09-08_af_rol_permisos.sql)
+[2026-09-08_af_rol_permisos.sql](2026-09-08_af_rol_permisos.sql)
+y [2026-09-08_af_historial_depreciacion.sql](2026-09-08_af_historial_depreciacion.sql)
 
 > ✅ **Aplicado y verificado en el mirror `siad_v3_restore` el 2026-09-08.** Respaldo previo en
 > `Database/Backups/siad_v3_restore_antes_activos_fijos_20260908_124621.backup`. El estado del SRV
@@ -20,6 +21,14 @@ y [2026-09-08_af_rol_permisos.sql](2026-09-08_af_rol_permisos.sql)
 >    `ubicacion`, `proveedor`) ya no se escriben: para los registros nuevos el texto sale del JOIN
 >    con el catálogo. `responsable` y `cargo_responsable` sí se escriben, truncados al ancho de su
 >    columna.
+>
+> ⚠️ **Correcciones posteriores al primer commit, ya incorporadas al paso 1.** Una revisión del
+> 2026-09-08 encontró tres consultas del módulo que no filtraban por empresa: el cruce con
+> `prv_proveedores` en `fn_af_activo_obtener`, la validación del proveedor en `sp_af_activo_guardar` y
+> las de ubicación y centro de costo en `sp_af_activo_asignar`. Las tres están corregidas. Además,
+> `sp_af_activo_asignar` borraba el centro de costo al reasignar, y `valor_a_depreciar` se escribía
+> como base depreciable cuando el histórico la usa como CUOTA ANUAL en 827 de 829 filas. Si ya
+> aplicaste una versión anterior del paso 1 en algún sitio, **vuelve a correrlo**: es idempotente.
 >
 > ⚠️ La base **ACTIVA es `siad_v4`**, no `siad_v3`.
 >
@@ -126,6 +135,7 @@ Las cuatro deben devolver un nombre. Si `af_activo_fijo` sale en `NULL`, falta a
 | 1 | `2026-09-08_af_activos_fijos_f1_registro.sql` | Aditivo + 3 ampliaciones de tipo + objetos | Sí | `af_activo_fijo`, `th_empleado`, `prv_proveedores`, `con_centro_costo` |
 | 2 | `2026-09-08_af_semilla_catalogos_ejemplo.sql` | Datos idempotente (solo `INSERT`) | Sí | El paso 1, y el plan de cuentas ERSAPS cargado |
 | 3 | `2026-09-08_af_rol_permisos.sql` | Datos idempotente (solo `INSERT` en `identity`) | Sí | El portal publicado con los permisos `module.activosfijos.*` |
+| 4 | `2026-09-08_af_historial_depreciacion.sql` | Objetos (2 funciones de LECTURA) | Sí | El paso 1 |
 
 El orden entre 1 y 2 es obligatorio: el paso 2 llena tablas que crea el paso 1. El paso 3 es
 independiente de los otros dos y toca otro esquema, pero sin él el módulo queda invisible para todos
@@ -284,6 +294,48 @@ El script imprime al final los permisos por rol y los usuarios asignados.
 "Activos Fijos Jefatura", más el usuario de contabilidad asignado a la jefatura. Se corrió tres veces
 para comprobar la idempotencia: a partir de la segunda inserta cero filas.
 
+## 5 quater. Detalle del paso 4, el historial de depreciación
+
+**Qué hace:** publica `fn_af_activo_depreciacion_listar` y `fn_af_activo_depreciacion_resumen`, que
+alimentan la pestaña "Historial de depreciación" de la ficha. Son de solo lectura: no crean ni alteran
+ninguna tabla y no escriben una sola fila.
+
+Sacan a la luz las 44,579 filas de `af_activo_fijo_depreciacion` que estaban migradas desde julio y no
+se veían en ninguna pantalla.
+
+⚠️ **El listado resuelve por dos vías, identificador y código.** La migración de julio dejó 792 filas
+sin `activo_fijo_id` y las buscó luego por `codigo_activo`; 80 de esos códigos son huérfanos, de
+activos dados de baja antes de migrar. Cada fila viaja marcada con `vinculo_por_codigo` para que en
+pantalla se distinga de dónde salió.
+
+⚠️ **La función de resumen devuelve el descuadre a propósito.** El detalle mensual explica
+L. 10,368,231.23 de los L. 16,048,909.78 que declaran los activos. El análisis completo está en
+[`docs/plans/2026-09-08-activos-fijos-descuadre-depreciacion.md`](../docs/plans/2026-09-08-activos-fijos-descuadre-depreciacion.md):
+el detalle no está corrupto, arranca en junio de 2016 y todo lo anterior no viajó. Resolverlo es
+requisito de la Fase 2.
+
+**¿Ya aplicado?**
+
+```bash
+psql "$SRV" -c "SELECT to_regproc('public.fn_af_activo_depreciacion_listar') AS listar,
+                       to_regproc('public.fn_af_activo_depreciacion_resumen') AS resumen;"
+```
+
+**Aplicar:**
+
+```bash
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-09-08_af_historial_depreciacion.sql
+```
+
+**Verificación posterior**, sobre cualquier activo con historial:
+
+```bash
+psql "$SRV" -c "SELECT * FROM public.fn_af_activo_depreciacion_resumen(2, 182);"
+```
+
+Resultado real en el mirror para ese activo: 110 filas de 2016 a 2025, suma del detalle
+L. 1,793,298.83 contra L. 1,836,523.96 del maestro, diferencia L. 43,225.13.
+
 ## 6. Después de aplicar
 
 1. **Asignar al resto de personas** a los roles que crea el paso 3, desde `/parametros/roles` o
@@ -297,7 +349,7 @@ para comprobar la idempotencia: a partir de la segunda inserta cero filas.
 
 | Base | Estado |
 |---|---|
-| Mirror `siad_v3_restore` @ localhost | ✅ **Los tres pasos aplicados y verificados** el 2026-09-08. El paso 3 se corrió dos veces para comprobar la idempotencia: la segunda no insertó nada |
+| Mirror `siad_v3_restore` @ localhost | ✅ **Los cuatro pasos aplicados y verificados** el 2026-09-08. El paso 3 se corrió dos veces para comprobar la idempotencia: la segunda no insertó nada |
 | Desarrollo @ `3.208.232.209` | **Pendiente** — no aplicado |
 | SRV `siad_v4` @ `172.16.0.9` | **Pendiente** — no aplicado |
 
@@ -305,9 +357,10 @@ para comprobar la idempotencia: a partir de la segunda inserta cero filas.
 
 | Archivo | Estado en git |
 |---|---|
-| `Database/2026-09-08_af_activos_fijos_f1_registro.sql` | Sin seguimiento, sin commit |
-| `Database/2026-09-08_af_semilla_catalogos_ejemplo.sql` | Sin seguimiento, sin commit |
-| `Database/2026-09-08_af_rol_permisos.sql` | Sin seguimiento, sin commit |
+| `Database/2026-09-08_af_activos_fijos_f1_registro.sql` | Commiteado en `0fc3050`, con correcciones posteriores sin commit |
+| `Database/2026-09-08_af_semilla_catalogos_ejemplo.sql` | Commiteado en `0fc3050` |
+| `Database/2026-09-08_af_rol_permisos.sql` | Commiteado en `0fc3050` |
+| `Database/2026-09-08_af_historial_depreciacion.sql` | Sin seguimiento, sin commit |
 | `Database/2026-09-08_af_runbook_despliegue_srv.md` | Sin seguimiento, sin commit |
 
 El código C# y Blazor del módulo (DTOs, servicios, controladores, clientes y páginas) también está sin

@@ -823,8 +823,11 @@
         // responsable que existe, y perderlo por vaciar un combo sería un dato menos.
         if (v is not null)
         {
-            modelo.Responsable = v.Nombre;
-            modelo.CargoResponsable = v.CargoNombre;
+            // El nombre del empleado admite 120 caracteres y su cargo 80, pero los campos
+            // del activo son de 80 y 50. Sin recortar, elegir a alguien con un cargo largo
+            // dejaba el formulario sin poder guardarse por un campo que ni siquiera se ve.
+            modelo.Responsable = Recortar(v.Nombre, 80);
+            modelo.CargoResponsable = Recortar(v.CargoNombre, 50);
         }
     }
 
@@ -964,6 +967,9 @@
             Text = texto,
             RenderStyle = estilo
         });
+
+    private static string? Recortar(string? texto, int largo)
+        => string.IsNullOrEmpty(texto) || texto.Length <= largo ? texto : texto[..largo];
 
     private static DateTime? ADateTime(DateOnly? fecha) => fecha?.ToDateTime(TimeOnly.MinValue);
 
