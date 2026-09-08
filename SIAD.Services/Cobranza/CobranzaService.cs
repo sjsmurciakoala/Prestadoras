@@ -790,6 +790,11 @@ public class CobranzaService : ICobranzaService
             DeudorNombre = string.IsNullOrWhiteSpace(convenio.Representante)
                 ? convenio.ClienteNombre
                 : convenio.Representante!,
+            // Cuando firma un representante, el pagaré tiene que decir por quién
+            // se obliga; si firma el titular queda vacío.
+            TitularRepresentado = string.IsNullOrWhiteSpace(convenio.Representante)
+                ? null
+                : convenio.ClienteNombre,
             // El convenio ya resolvió la identidad (la del representante o, si no
             // lo hay, la del titular) y el nombre comercial de la empresa.
             DeudorIdentidad = convenio.DocRepresentante,

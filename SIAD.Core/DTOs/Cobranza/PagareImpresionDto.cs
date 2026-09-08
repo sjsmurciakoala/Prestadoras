@@ -22,6 +22,12 @@ public sealed record PagareImpresionDto
     // --- Deudor (quien firma) ---
     public string DeudorNombre { get; init; } = string.Empty;
     public string? DeudorIdentidad { get; init; }
+    /// <summary>
+    /// Titular de la cuenta cuando quien firma es su representante. Vacío
+    /// significa que firma el titular en nombre propio, y el pagaré lo declara
+    /// obligándose en su condición personal.
+    /// </summary>
+    public string? TitularRepresentado { get; init; }
     /// <summary>Número que va al pie, bajo la identidad: correlativo del convenio y año.</summary>
     public string NumeroCuenta { get; init; } = string.Empty;
 

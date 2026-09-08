@@ -49,7 +49,7 @@ public sealed class Rpt_Dev_Pagare : XtraReport
     private const string Obligacion =
         "Yo, <b>{DEUDOR}</b>, con documento de identidad No. <b>{IDENTIDAD}</b>, mayor de edad, de " +
         "nacionalidad hondureña, con domicilio en el Municipio de <b>{MUNICIPIO}</b>, Departamento de " +
-        "<b>{DEPARTAMENTO}</b>, en mi condición personal, por medio del presente documento denominado " +
+        "<b>{DEPARTAMENTO}</b>, {CALIDAD}, por medio del presente documento denominado " +
         "<b>PAGARÉ A LA VISTA, HAGO CONSTAR:</b> que en mi calidad antes dicha debo y pagaré " +
         "incondicionalmente a la Empresa <b>{ACREEDOR}</b>, la suma del valor real más intereses y " +
         "recargos, siendo un total de <b>L. {MONTO}</b>, el cual será pagado en <b>{MESES}</b> meses, " +
@@ -106,7 +106,14 @@ public sealed class Rpt_Dev_Pagare : XtraReport
         y += 62f;
 
         // ---------- Cuerpo ----------
+        // Quien firma puede ser el titular o su representante; el pagaré tiene
+        // que decir en qué calidad se obliga.
+        var calidad = string.IsNullOrWhiteSpace(pagare.TitularRepresentado)
+            ? "en mi condición personal"
+            : $"actuando en mi condición de representante de <b>{Mayus(pagare.TitularRepresentado)}</b>";
+
         y = Parrafo(band, y, Obligacion
+            .Replace("{CALIDAD}", calidad)
             .Replace("{DEUDOR}", Mayus(pagare.DeudorNombre))
             .Replace("{IDENTIDAD}", Dato(pagare.DeudorIdentidad))
             .Replace("{MUNICIPIO}", Municipio)

@@ -14,7 +14,7 @@ namespace SIAD.Tests.Cobros;
 /// </summary>
 public class PagareRenderTests
 {
-    private static PagareImpresionDto Muestra(string? identidad = "0506-1981-01719", string? firmante = null)
+    private static PagareImpresionDto Muestra(string? identidad = "0506-1981-01719", string? firmante = null, string? titularRepresentado = null)
         => new()
         {
             PlanId = 39,
@@ -25,6 +25,7 @@ public class PagareRenderTests
             NumeroCuenta = "090807355",
             EmpresaNombre = "Aguas de Puerto Cortés S.A. de C.V.",
             FirmanteCobranza = firmante,
+            TitularRepresentado = titularRepresentado,
             MontoTotal = 8672.85m,
             CantidadMeses = 4,
             FechaDesde = new DateTime(2026, 9, 10),
@@ -101,6 +102,20 @@ public class PagareRenderTests
         Assert.Contains("Unidad de Cobranza", texto);
         Assert.Contains("Identidad No. 0506-1981-01719", texto);
         Assert.Contains("Cuenta No. 090807355", texto);
+    }
+
+    [Fact]
+    public void Quien_firma_por_un_tercero_se_obliga_como_representante()
+    {
+        // Firma un representante: el pagare dice por quien se obliga.
+        var conRepresentante = TextoRenderizado(Muestra(titularRepresentado: "Maria Discua Zelaya"));
+        Assert.Contains("actuando en mi condición de representante de MARIA DISCUA ZELAYA", conRepresentante);
+        Assert.DoesNotContain("en mi condición personal", conRepresentante);
+
+        // Firma el titular: se obliga en nombre propio.
+        var titular = TextoRenderizado(Muestra());
+        Assert.Contains("en mi condición personal", titular);
+        Assert.DoesNotContain("representante de", titular);
     }
 
     [Fact]
