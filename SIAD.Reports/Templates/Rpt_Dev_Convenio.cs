@@ -235,7 +235,16 @@ public sealed class Rpt_Dev_Convenio : XtraReport
             FontSize, bold: false, TextAlignment.MiddleCenter));
         rf.Controls.Add(Etiqueta(Dato(convenio.DocRepresentante), colDerecha, fy, colAncho, RowH,
             FontSize, bold: false, TextAlignment.MiddleCenter));
-        fy += RowH + 16f;
+        fy += RowH;
+
+        if (!string.IsNullOrWhiteSpace(convenio.ContactoRepresentante))
+        {
+            rf.Controls.Add(Etiqueta($"Contacto: {convenio.ContactoRepresentante!.Trim()}",
+                colDerecha, fy, colAncho, RowH, FontSize, bold: false, TextAlignment.MiddleCenter));
+            fy += RowH;
+        }
+
+        fy += 16f;
 
         var elaborado = $"Elaborado por: {Dato(convenio.ElaboradoPor)}";
         if (convenio.FechaElaboracion is { } cuando)

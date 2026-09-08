@@ -14,7 +14,7 @@ namespace SIAD.Tests.Cobros;
 /// </summary>
 public class ConvenioRenderTests
 {
-    private static ConvenioImpresionDto Muestra(int meses = 4, decimal cuota = 2168.21m, string? firmante = null)
+    private static ConvenioImpresionDto Muestra(int meses = 4, decimal cuota = 2168.21m, string? firmante = null, string? contacto = null)
     {
         var cuotas = new List<ConvenioCuotaImpresionDto>();
         for (var i = 0; i < meses; i++)
@@ -50,6 +50,7 @@ public class ConvenioRenderTests
             Comentario = "Es el dueño de la propiedad 3211-7895",
             EmpresaNombre = "Aguas de Puerto Cortés S.A. de C.V.",
             FirmanteCobranza = firmante,
+            ContactoRepresentante = contacto,
             Conceptos = new List<ConvenioConceptoDto>
             {
                 new() { Descripcion = "Agua Potable", Valor = 6799.51m },
@@ -128,6 +129,16 @@ public class ConvenioRenderTests
         Assert.Contains("6,504.64", texto);
         Assert.Contains("4,336.43", texto);
         Assert.Contains("2,168.22", texto);
+    }
+
+    [Fact]
+    public void El_contacto_de_quien_firma_sale_solo_cuando_hay_dato()
+    {
+        var conContacto = TextoRenderizado(Muestra(contacto: "9876-5432"));
+        Assert.Contains("Contacto: 9876-5432", conContacto);
+
+        var sinContacto = TextoRenderizado(Muestra());
+        Assert.DoesNotContain("Contacto:", sinContacto);
     }
 
     [Fact]

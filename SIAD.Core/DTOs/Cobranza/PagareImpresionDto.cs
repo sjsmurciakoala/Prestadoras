@@ -28,6 +28,8 @@ public sealed record PagareImpresionDto
     /// obligándose en su condición personal.
     /// </summary>
     public string? TitularRepresentado { get; init; }
+    /// <summary>Telefono de contacto de quien firma; vacio no se imprime.</summary>
+    public string? ContactoRepresentante { get; init; }
     /// <summary>Número que va al pie, bajo la identidad: correlativo del convenio y año.</summary>
     public string NumeroCuenta { get; init; } = string.Empty;
 

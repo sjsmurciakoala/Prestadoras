@@ -14,7 +14,7 @@ namespace SIAD.Tests.Cobros;
 /// </summary>
 public class PagareRenderTests
 {
-    private static PagareImpresionDto Muestra(string? identidad = "0506-1981-01719", string? firmante = null, string? titularRepresentado = null)
+    private static PagareImpresionDto Muestra(string? identidad = "0506-1981-01719", string? firmante = null, string? titularRepresentado = null, string? contacto = null)
         => new()
         {
             PlanId = 39,
@@ -26,6 +26,7 @@ public class PagareRenderTests
             EmpresaNombre = "Aguas de Puerto Cortés S.A. de C.V.",
             FirmanteCobranza = firmante,
             TitularRepresentado = titularRepresentado,
+            ContactoRepresentante = contacto,
             MontoTotal = 8672.85m,
             CantidadMeses = 4,
             FechaDesde = new DateTime(2026, 9, 10),
@@ -116,6 +117,17 @@ public class PagareRenderTests
         var titular = TextoRenderizado(Muestra());
         Assert.Contains("en mi condición personal", titular);
         Assert.DoesNotContain("representante de", titular);
+    }
+
+    [Fact]
+    public void El_contacto_de_quien_firma_sale_solo_cuando_hay_dato()
+    {
+        var conContacto = TextoRenderizado(Muestra(contacto: "9876-5432"));
+        Assert.Contains("Contacto 9876-5432", conContacto);
+
+        // Sin dato no queda un rotulo suelto al pie.
+        var sinContacto = TextoRenderizado(Muestra());
+        Assert.DoesNotContain("Contacto", sinContacto);
     }
 
     [Fact]

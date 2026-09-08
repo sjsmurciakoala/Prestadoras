@@ -22,6 +22,8 @@ public sealed record ConvenioImpresionDto
     public string? ClienteDireccion { get; init; }
     public string? Representante { get; init; }
     public string? DocRepresentante { get; init; }
+    /// <summary>Telefono de contacto de quien firma; vacio no se imprime.</summary>
+    public string? ContactoRepresentante { get; init; }
 
     public decimal MontoTotal { get; init; }
     public decimal Prima { get; init; }

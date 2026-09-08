@@ -169,6 +169,11 @@ public sealed class Rpt_Dev_Pagare : XtraReport
         yDer = DatoDeFirma(band, colDerecha, yDer, "Identidad No.", Dato(pagare.DeudorIdentidad));
         yDer = DatoDeFirma(band, colDerecha, yDer, "Cuenta No.", pagare.NumeroCuenta);
 
+        if (!string.IsNullOrWhiteSpace(pagare.ContactoRepresentante))
+        {
+            yDer = DatoDeFirma(band, colDerecha, yDer, "Contacto", pagare.ContactoRepresentante!.Trim());
+        }
+
         band.HeightF = Math.Max(yIzq + RowH, yDer) + 16f;
         Bands.Add(band);
     }

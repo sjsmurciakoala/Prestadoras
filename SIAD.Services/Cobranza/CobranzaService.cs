@@ -710,6 +710,7 @@ public class CobranzaService : ICobranzaService
             ClienteDireccion = hdr.direccion,
             Representante = hdr.representante,
             DocRepresentante = identidad,
+            ContactoRepresentante = hdr.numrepresentante,
             MontoTotal = hdr.monto ?? 0m,
             Prima = hdr.vprima ?? 0m,
             MontoFinanciado = hdr.montofinanc ?? 0m,
@@ -798,6 +799,7 @@ public class CobranzaService : ICobranzaService
             // El convenio ya resolvió la identidad (la del representante o, si no
             // lo hay, la del titular) y el nombre comercial de la empresa.
             DeudorIdentidad = convenio.DocRepresentante,
+            ContactoRepresentante = convenio.ContactoRepresentante,
             NumeroCuenta = convenio.ClienteClave,
             EmpresaNombre = convenio.EmpresaNombre,
             FirmanteCobranza = convenio.FirmanteCobranza,
