@@ -37,6 +37,7 @@ public class AprobacionConfigTests : IntegrationTestBase, IAsyncLifetime
     {
         await base.InitializeAsync();
         if (!Fixture.Available) return;
+        await LimpiarAprobacionPorNivelesAsync();
 
         var options = new DbContextOptionsBuilder<SiadDbContext>().UseNpgsql(Connection).Options;
         var empresa = new TestCurrentCompanyService(CompanyId);

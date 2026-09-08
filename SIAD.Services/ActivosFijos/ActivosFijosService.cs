@@ -209,6 +209,40 @@ public sealed class ActivosFijosService : IActivosFijosService
             }, TransaccionActual(), cancellationToken: ct));
     }
 
+    // ── Historial de depreciación (solo lectura) ────────────────────────────
+
+    public async Task<IReadOnlyList<ActivoDepreciacionDto>> GetDepreciacionesAsync(int activoId, CancellationToken ct = default)
+    {
+        if (activoId <= 0) return Array.Empty<ActivoDepreciacionDto>();
+        var connection = await AbrirConexionAsync(ct);
+
+        var filas = await connection.QueryAsync<ActivoDepreciacionDto>(new CommandDefinition(@"
+            SELECT id AS Id, anio AS Anio, mes AS Mes, periodo AS Periodo,
+                   fecha_depreciacion AS FechaDepreciacion, valor_depreciado AS ValorDepreciado,
+                   valor_neto_libros AS ValorNetoLibros, cuenta_depreciacion AS CuentaDepreciacion,
+                   cuenta_gasto AS CuentaGasto, descripcion AS Descripcion,
+                   vinculo_por_codigo AS VinculoPorCodigo
+              FROM public.fn_af_activo_depreciacion_listar(@CompanyId, @ActivoId)",
+            new { CompanyId = EnsureCompanyId(), ActivoId = activoId }, TransaccionActual(), cancellationToken: ct));
+
+        return new List<ActivoDepreciacionDto>(filas);
+    }
+
+    public async Task<ActivoDepreciacionResumenDto> GetDepreciacionResumenAsync(int activoId, CancellationToken ct = default)
+    {
+        if (activoId <= 0) return new ActivoDepreciacionResumenDto();
+        var connection = await AbrirConexionAsync(ct);
+
+        var resumen = await connection.QuerySingleOrDefaultAsync<ActivoDepreciacionResumenDto>(new CommandDefinition(@"
+            SELECT filas AS Filas, anio_desde AS AnioDesde, anio_hasta AS AnioHasta,
+                   total_detalle AS TotalDetalle, acumulada_maestro AS AcumuladaMaestro,
+                   diferencia AS Diferencia, valor_compra AS ValorCompra, valor_libros AS ValorLibros
+              FROM public.fn_af_activo_depreciacion_resumen(@CompanyId, @ActivoId)",
+            new { CompanyId = EnsureCompanyId(), ActivoId = activoId }, TransaccionActual(), cancellationToken: ct));
+
+        return resumen ?? new ActivoDepreciacionResumenDto();
+    }
+
     // ── Componentes ─────────────────────────────────────────────────────────
 
     public async Task<IReadOnlyList<ActivoComponenteDto>> GetComponentesAsync(int activoId, CancellationToken ct = default)

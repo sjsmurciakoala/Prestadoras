@@ -51,6 +51,7 @@ public class OrdenCompraAprobacionTests : IntegrationTestBase, IAsyncLifetime
 
         await DesactivarControlPresupuestarioAsync();
         await DesactivarIntegracionContableAsync();
+        await LimpiarAprobacionPorNivelesAsync();
 
         var options = new DbContextOptionsBuilder<SiadDbContext>().UseNpgsql(Connection).Options;
         var empresa = new TestCurrentCompanyService(CompanyId);

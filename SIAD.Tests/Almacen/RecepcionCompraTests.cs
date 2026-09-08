@@ -57,6 +57,7 @@ public class RecepcionCompraTests : IntegrationTestBase, IAsyncLifetime
         // si quedó encendido por una demo o un piloto, estas pruebas fallarían con
         // «excede el presupuesto disponible» sin tener nada que ver con eso.
         await DesactivarControlPresupuestarioAsync();
+        await LimpiarAprobacionPorNivelesAsync();
 
         if (!Fixture.Available)
         {

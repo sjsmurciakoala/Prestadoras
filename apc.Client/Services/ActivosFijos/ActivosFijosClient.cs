@@ -63,6 +63,18 @@ public sealed class ActivosFijosClient
         await GarantizarExitoAsync(r, "No se pudo registrar la asignación.", ct);
     }
 
+    public async Task<List<ActivoDepreciacionDto>> GetDepreciacionesAsync(int activoId, CancellationToken ct = default)
+    {
+        var r = await _http.GetAsync($"{BaseUrl}/{activoId}/depreciaciones", ct);
+        return await r.ReadFromJsonAsyncWithAuthCheck<List<ActivoDepreciacionDto>>(ct) ?? new();
+    }
+
+    public async Task<ActivoDepreciacionResumenDto> GetDepreciacionResumenAsync(int activoId, CancellationToken ct = default)
+    {
+        var r = await _http.GetAsync($"{BaseUrl}/{activoId}/depreciaciones/resumen", ct);
+        return await r.ReadFromJsonAsyncWithAuthCheck<ActivoDepreciacionResumenDto>(ct) ?? new();
+    }
+
     public async Task<List<ActivoComponenteDto>> GetComponentesAsync(int activoId, CancellationToken ct = default)
     {
         var r = await _http.GetAsync($"{BaseUrl}/{activoId}/componentes", ct);

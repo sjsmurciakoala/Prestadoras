@@ -58,6 +58,7 @@ public class OrdenCompraTests : IntegrationTestBase, IAsyncLifetime
         // tiene su propia cobertura en Presupuesto/CompromisoOrdenCompraTests, que enciende el
         // control por su cuenta. Mismo criterio que CompraCxpTests y RecepcionCompraTests.
         await DesactivarControlPresupuestarioAsync();
+        await LimpiarAprobacionPorNivelesAsync();
 
         var options = new DbContextOptionsBuilder<SiadDbContext>()
             .UseNpgsql(Connection)

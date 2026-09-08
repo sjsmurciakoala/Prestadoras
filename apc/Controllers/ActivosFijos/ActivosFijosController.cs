@@ -93,6 +93,16 @@ public sealed class ActivosFijosController : ControllerBase
         }
     }
 
+    // ── Historial de depreciación ───────────────────────────────────────────
+
+    [HttpGet("{id:int}/depreciaciones")]
+    public async Task<IActionResult> GetDepreciaciones(int id, CancellationToken ct)
+        => Ok(await _service.GetDepreciacionesAsync(id, ct));
+
+    [HttpGet("{id:int}/depreciaciones/resumen")]
+    public async Task<IActionResult> GetDepreciacionResumen(int id, CancellationToken ct)
+        => Ok(await _service.GetDepreciacionResumenAsync(id, ct));
+
     // ── Componentes ─────────────────────────────────────────────────────────
 
     [HttpGet("{id:int}/componentes")]

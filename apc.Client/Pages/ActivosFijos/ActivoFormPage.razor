@@ -372,6 +372,96 @@
                             </ContentTemplate>
                         </DxTabPage>
 
+                        <DxTabPage Text="Historial de depreciación">
+                            <ContentTemplate>
+                                @if (!resumenDep.TieneHistorial)
+                                {
+                                    <div class="alert alert-secondary" role="alert">
+                                        <i class="bi bi-info-circle me-2"></i>
+                                        Este activo no tiene detalle de depreciación. Es lo que pasa con los
+                                        registros que llegaron del histórico sin ninguna fila de desglose.
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="modern-card summary-card mb-3">
+                                        <div class="row g-3">
+                                            <div class="col-6 col-lg-3">
+                                                <div class="kpi-label">Suma del detalle</div>
+                                                <div class="kpi-value">@resumenDep.TotalDetalle.ToString("N2")</div>
+                                                <div class="kpi-hint">
+                                                    @resumenDep.Filas.ToString("N0") registros@(resumenDep.AnioDesde.HasValue ? $", de {resumenDep.AnioDesde} a {resumenDep.AnioHasta}" : "")
+                                                </div>
+                                            </div>
+                                            <div class="col-6 col-lg-3">
+                                                <div class="kpi-label">Acumulada del activo</div>
+                                                <div class="kpi-value">@resumenDep.AcumuladaMaestro.ToString("N2")</div>
+                                                <div class="kpi-hint">Lo que declara su ficha</div>
+                                            </div>
+                                            <div class="col-6 col-lg-3">
+                                                <div class="kpi-label">Sin explicar por el detalle</div>
+                                                <div class="kpi-value @(resumenDep.Cuadra ? "" : "text-warning")">@resumenDep.Diferencia.ToString("N2")</div>
+                                                <div class="kpi-hint">@(resumenDep.Cuadra ? "El desglose cuadra" : "Revisar antes de depreciar")</div>
+                                            </div>
+                                            <div class="col-6 col-lg-3">
+                                                <div class="kpi-label">Valor en libros</div>
+                                                <div class="kpi-value">@resumenDep.ValorLibros.ToString("N2")</div>
+                                                <div class="kpi-hint">sobre @resumenDep.ValorCompra.ToString("N2") de compra</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    @if (!resumenDep.Cuadra)
+                                    {
+                                        <div class="alert alert-warning" role="alert">
+                                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                            El detalle mensual no explica toda la depreciación acumulada de este
+                                            activo. Suele deberse a que el sistema anterior arrastró un saldo
+                                            inicial sin desglose. Hay que resolverlo antes de reanudar la
+                                            depreciación, para que el motor sepa desde dónde continuar.
+                                        </div>
+                                    }
+
+                                    <DxGrid Data="@depreciaciones" KeyFieldName="@nameof(ActivoDepreciacionDto.Id)"
+                                            PageSize="15" PageSizeSelectorVisible="true"
+                                            PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                                            PagerPosition="GridPagerPosition.Bottom"
+                                            ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                                            ShowGroupPanel="false" CssClass="grid-solicitudes">
+                                        <Columns>
+                                            <DxGridDataColumn FieldName="@nameof(ActivoDepreciacionDto.Periodo)" Caption="Período" Width="130px">
+                                                <CellDisplayTemplate Context="cell">
+                                                    @if (cell.DataItem is ActivoDepreciacionDto item)
+                                                    {
+                                                        <div class="d-flex align-items-center gap-1">
+                                                            <span>@item.Periodo</span>
+                                                            @if (item.VinculoPorCodigo)
+                                                            {
+                                                                <i class="bi bi-link-45deg text-warning"
+                                                                   title="Fila enlazada por código: la migración la dejó sin vínculo directo"></i>
+                                                            }
+                                                        </div>
+                                                    }
+                                                </CellDisplayTemplate>
+                                            </DxGridDataColumn>
+                                            <DxGridDataColumn FieldName="@nameof(ActivoDepreciacionDto.FechaDepreciacion)" Caption="Fecha"
+                                                              Width="120px" DisplayFormat="dd/MM/yyyy" />
+                                            <DxGridDataColumn FieldName="@nameof(ActivoDepreciacionDto.ValorDepreciado)" Caption="Depreciado"
+                                                              Width="140px" DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                                            <DxGridDataColumn FieldName="@nameof(ActivoDepreciacionDto.ValorNetoLibros)" Caption="Valor en libros"
+                                                              Width="150px" DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                                            <DxGridDataColumn FieldName="@nameof(ActivoDepreciacionDto.CuentaDepreciacion)" Caption="Cuenta acumulada" MinWidth="140" Visible="false" />
+                                            <DxGridDataColumn FieldName="@nameof(ActivoDepreciacionDto.CuentaGasto)" Caption="Cuenta de gasto" MinWidth="140" Visible="false" />
+                                            <DxGridDataColumn FieldName="@nameof(ActivoDepreciacionDto.Descripcion)" Caption="Descripción" MinWidth="180" />
+                                        </Columns>
+                                        <EmptyDataAreaTemplate Context="sinDepreciacion">
+                                            <div class="p-4 text-center text-muted">Sin movimientos de depreciación.</div>
+                                        </EmptyDataAreaTemplate>
+                                    </DxGrid>
+                                }
+                            </ContentTemplate>
+                        </DxTabPage>
+
                         <DxTabPage Text="Historial de asignación">
                             <ContentTemplate>
                                 <DxGrid Data="@asignaciones" KeyFieldName="@nameof(ActivoAsignacionDto.Id)"
@@ -537,6 +627,8 @@
 
     private List<ActivoAsignacionDto> asignaciones = new();
     private List<ActivoComponenteDto> componentes = new();
+    private List<ActivoDepreciacionDto> depreciaciones = new();
+    private ActivoDepreciacionResumenDto resumenDep = new();
 
     private bool asignarVisible;
     private ActivoAsignacionRequestDto asignacion = new();
@@ -564,6 +656,8 @@
             modelo = new ActivoFijoEditDto { Depreciar = true, FechaCompra = DateOnly.FromDateTime(DateTime.Today) };
             asignaciones = new();
             componentes = new();
+            depreciaciones = new();
+            resumenDep = new();
         }
         else
         {
@@ -619,6 +713,8 @@
             modelo = dto;
             asignaciones = await ActivosClient.GetAsignacionesAsync(id);
             componentes = await ActivosClient.GetComponentesAsync(id);
+            depreciaciones = await ActivosClient.GetDepreciacionesAsync(id);
+            resumenDep = await ActivosClient.GetDepreciacionResumenAsync(id);
         }
         catch (Exception ex)
         {

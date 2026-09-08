@@ -61,6 +61,7 @@ public class DevengoFacturaCompraTests : IntegrationTestBase, IAsyncLifetime
             _context, empresa, motor, new TasaIsvArticuloResolver(_context), _presupuesto);
 
         await DesactivarIntegracionContableAsync();
+        await LimpiarAprobacionPorNivelesAsync();
 
         _codProveedor = await _context.prv_proveedores.AsNoTracking()
             .Where(p => p.company_id == CompanyId && (p.status == null || p.status == true))

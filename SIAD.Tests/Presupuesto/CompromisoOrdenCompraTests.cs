@@ -63,6 +63,7 @@ public class CompromisoOrdenCompraTests : IntegrationTestBase, IAsyncLifetime
 
         // El asiento contable de la compra no es lo que se prueba aquí.
         await DesactivarIntegracionContableAsync();
+        await LimpiarAprobacionPorNivelesAsync();
 
         _codProveedor = await _context.prv_proveedores.AsNoTracking()
             .Where(p => p.company_id == CompanyId && (p.status == null || p.status == true))

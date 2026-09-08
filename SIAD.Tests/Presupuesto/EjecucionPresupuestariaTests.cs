@@ -57,6 +57,7 @@ public class EjecucionPresupuestariaTests : IntegrationTestBase, IAsyncLifetime
         _ejecucion = new PresupuestoEjecucionService(_context, empresa);
 
         await DesactivarIntegracionContableAsync();
+        await LimpiarAprobacionPorNivelesAsync();
 
         _codProveedor = await _context.prv_proveedores.AsNoTracking()
             .Where(p => p.company_id == CompanyId && (p.status == null || p.status == true))

@@ -95,6 +95,7 @@ temp_excel_read/
 # --- Backups grandes de BD ---
 Database/Backups/*.backup
 Database/Backups/*.sql
+_respaldo_siad_v4.cmd
 
 # --- Archivos de carga con potencial PII ---
 Carga_*.xlsx

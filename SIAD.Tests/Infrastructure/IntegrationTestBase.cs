@@ -64,6 +64,38 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         await cmd.ExecuteNonQueryAsync();
     }
 
+    /// <summary>
+    /// Borra la configuración de aprobación por niveles de la empresa de prueba y deja los cuatro
+    /// documentos en su estado de fábrica (control apagado, sin autoaprobación), dentro de la
+    /// transacción del test.
+    /// <para>
+    /// <b>Por qué hace falta:</b> <c>cfg_aprobacion_control</c>, <c>cfg_aprobacion_nivel</c> y
+    /// <c>cfg_aprobacion_aprobador</c> son estado GLOBAL de la base de prueba, igual que el control
+    /// presupuestario. El 2026-09-01 se encendió la escalera de <c>COMPRAS_OC</c> desde el portal y
+    /// se cargaron cuatro niveles en el mirror; desde entonces <c>AprobarAsync</c> derivaba a la
+    /// firma por niveles y 89 pruebas se caían: unas con «la orden debe enviarse a aprobación antes
+    /// de poder firmarse», otras al chocar con <c>uq_cfg_aprobacion_nivel</c> al sembrar sus propios
+    /// tramos sobre los que ya estaban.
+    /// </para>
+    /// <para>
+    /// Lo llaman los dos bandos: los tests que ejercitan la MECÁNICA de compras, que necesitan la
+    /// escalera apagada, y los de aprobación, que parten de cero y siembran su propia configuración.
+    /// </para>
+    /// </summary>
+    protected async Task LimpiarAprobacionPorNivelesAsync()
+    {
+        await using var cmd = Connection.CreateCommand();
+        cmd.Transaction = Transaction;
+        cmd.CommandText = @"
+DELETE FROM public.cfg_aprobacion_aprobador WHERE company_id = @c;
+DELETE FROM public.cfg_aprobacion_nivel     WHERE company_id = @c;
+UPDATE public.cfg_aprobacion_control
+   SET modo = 0, permite_autoaprobacion = false
+ WHERE company_id = @c;";
+        cmd.Parameters.AddWithValue("c", CompanyId);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
     public async Task DisposeAsync()
     {
         if (Transaction is not null)

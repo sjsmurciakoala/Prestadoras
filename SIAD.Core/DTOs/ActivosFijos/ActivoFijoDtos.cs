@@ -198,3 +198,47 @@ public sealed class ActivoComponenteDto
 
     [StringLength(254)] public string? Observacion { get; set; }
 }
+
+/// <summary>Una fila del detalle mensual de depreciación de un activo.</summary>
+public sealed class ActivoDepreciacionDto
+{
+    public int Id { get; set; }
+    public short Anio { get; set; }
+    public short Mes { get; set; }
+
+    /// <summary>"2025-09", o "Sin período" para las filas que el origen trajo sin año.</summary>
+    public string Periodo { get; set; } = string.Empty;
+
+    public DateOnly? FechaDepreciacion { get; set; }
+    public decimal ValorDepreciado { get; set; }
+    public decimal ValorNetoLibros { get; set; }
+    public string? CuentaDepreciacion { get; set; }
+    public string? CuentaGasto { get; set; }
+    public string? Descripcion { get; set; }
+
+    /// <summary>
+    /// true = la migración dejó esta fila sin vínculo al activo y se encontró por el
+    /// código. Se muestra para que no parezca un dato de la misma calidad que el resto.
+    /// </summary>
+    public bool VinculoPorCodigo { get; set; }
+}
+
+/// <summary>
+/// Totales del historial de un activo, enfrentados a lo que declara el maestro.
+/// Una <see cref="Diferencia"/> distinta de cero significa que el detalle mensual no
+/// explica todo el acumulado, que es justo lo que hay que resolver antes de depreciar.
+/// </summary>
+public sealed class ActivoDepreciacionResumenDto
+{
+    public long Filas { get; set; }
+    public short? AnioDesde { get; set; }
+    public short? AnioHasta { get; set; }
+    public decimal TotalDetalle { get; set; }
+    public decimal AcumuladaMaestro { get; set; }
+    public decimal Diferencia { get; set; }
+    public decimal ValorCompra { get; set; }
+    public decimal ValorLibros { get; set; }
+
+    public bool TieneHistorial => Filas > 0;
+    public bool Cuadra => Diferencia == 0m;
+}
